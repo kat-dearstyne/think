@@ -1,10 +1,12 @@
 try:
 
     import os
+
     os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = 'hide'
     import pygame
 
     from .item import Area
+
 
     class DisplayIcon:
 
@@ -20,12 +22,14 @@ try:
                             (self.visual.x + (self.visual.w // 2) - (sw // 2),
                              self.visual.y + (self.visual.h // 2) - (sh // 2)))
 
+
     class AttendIcon(DisplayIcon):
 
         def __init__(self):
             super().__init__((30, 30))
             pygame.draw.circle(self.surface,
                                (255, 255, 0, 128), (15, 15), 15)
+
 
     class PointerIcon(DisplayIcon):
 
@@ -41,6 +45,7 @@ try:
             draw_pointer(2, 0, (255, 255, 255))
             draw_pointer(1, 0, (0, 0, 255))
 
+
     class ClickIcon(DisplayIcon):
 
         def __init__(self):
@@ -48,11 +53,12 @@ try:
 
             def draw_line(sx, sy):
                 pygame.draw.line(self.surface, (0, 0, 255),
-                                 (15 + 5*sx, 15 + 5*sy), (15 + 15*sx, 15 + 15*sy))
+                                 (15 + 5 * sx, 15 + 5 * sy), (15 + 15 * sx, 15 + 15 * sy))
 
             for sx in [-1, +1]:
                 for sy in [-1, +1]:
                     draw_line(sx, sy)
+
 
     class DisplayWindow:
 
@@ -86,6 +92,9 @@ try:
                     self.draw_text(v)
                     if v.isa == 'button':
                         self.draw_rect(v, dw=20, dh=20, color=(16, 16, 16))
+                elif v.isa == 'color':
+                    color = (0, 0, 0) if not hasattr(v.obj, 'rgb') else v.obj.rgb
+                    self.draw_rect(v, color=color, stroke=0)
                 else:
                     self.draw_rect(v, stroke=3)
 
@@ -96,9 +105,8 @@ try:
             pygame.display.update()
 
         def draw_rect(self, visual, dw=0, dh=0, color=(0, 0, 0), stroke=1):
-            pygame.draw.rect(self.screen, color,
-                             (visual.x - (dw // 2), visual.y - (dh // 2),
-                              visual.w + dw, visual.h + dh),
+            pygame.draw.rect(self.screen, color, (visual.x - (dw // 2), visual.y - (dh // 2),
+                                                  visual.w + dw, visual.h + dh),
                              stroke)
 
         def draw_circle(self, visual, dr=0, color=(0, 0, 0), stroke=1):
@@ -121,5 +129,5 @@ except ImportError as e:
 
     class DisplayWindow:
 
-        def __init__(self, size=(500, 500)):
+        def __init__(self, display, size=(500, 500)):
             raise Exception('pygame must be installed to draw display window')

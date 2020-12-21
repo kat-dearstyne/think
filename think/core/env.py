@@ -1,7 +1,6 @@
 import math
-import threading
 
-from .item import Area, Location
+from .item import Area
 from .window import DisplayWindow
 
 
@@ -51,6 +50,9 @@ class Display:
         text = str(text)
         return self.add(x, y, len(text) * 16, 16, isa, text)
 
+    def add_color(self, x, y, w, h, color, isa='color'):
+        return self.add(x, y, w, h, isa, color)
+
     def add_button(self, x, y, text):
         return self.add_text(x, y, text, isa='button')
 
@@ -96,7 +98,6 @@ class Speakers:
 
 
 class Keyboard:
-
     _KEY_TUPLES = [('a', False, 'a'), ('b', False, 'b'),
                    ('c', False, 'c'), ('d', False, 'd'), ('e', False, 'e'),
                    ('f', False, 'f'), ('g', False, 'g'), ('h', False, 'h'),
@@ -129,13 +130,13 @@ class Keyboard:
                    (')', True, 'right_parenthesis'),
                    ('_', True, 'underscore'), ('+', True, 'plus'),
                    ('\t', False, 'tab'), ('\n', False, 'enter'),
-                   ('[', False, 'open_bracket'),   ('{', True, 'open_brace'),
+                   ('[', False, 'open_bracket'), ('{', True, 'open_brace'),
                    (']', False, 'close_bracket'), ('}', True, 'close_brace'),
-                   ('\\', False, 'backslash'),   ('|', True, 'bar'),
+                   ('\\', False, 'backslash'), ('|', True, 'bar'),
                    (';', False, 'semicolon'), (':', True, 'colon'),
-                   ('\'', False, 'apostrophe'),  ('"', True, 'quote'),
+                   ('\'', False, 'apostrophe'), ('"', True, 'quote'),
                    (',', False, 'comma'), ('<', True, 'less_than'),
-                   ('.', False, 'period'),  ('>', True, 'greater_than'),
+                   ('.', False, 'period'), ('>', True, 'greater_than'),
                    ('/', False, 'slash'), ('?', True, 'question_mark'),
                    (' ', False, 'space'),
                    (None, False, 'shift')]
