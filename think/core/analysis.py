@@ -127,6 +127,9 @@ class Values:
         vals = map(lambda d: ('{:.' + str(places) + 'f}').format(d), self.v)
         return '\t'.join(vals)
 
+    def count(self, value):
+        return self.v.count(value)
+
     def __str__(self, places=3):
         vals = map(lambda d: ('{:.' + str(places) + 'f}').format(d), self.v)
         return '[' + ', '.join(vals) + ']'
@@ -146,6 +149,13 @@ class Data:
             m = values.mean()
             res.add(m if m else 0)
         return res
+
+    def proportion(self, val):
+        prop = Values()
+        for values in self.values_list:
+            total = values.size()
+            prop.add(values.count(val) / total)
+        return prop
 
     def analyze(self, human):
         return Result(self.means(), human)

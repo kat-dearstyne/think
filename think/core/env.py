@@ -50,8 +50,8 @@ class Display:
         text = str(text)
         return self.add(x, y, len(text) * 16, 16, isa, text)
 
-    def add_color(self, x, y, w, h, color, isa='color'):
-        return self.add(x, y, w, h, isa, color)
+    def add_color(self, x, y, r, color, isa='color'):
+        return self.add(x, y, r, r, isa, color)
 
     def add_button(self, x, y, text):
         return self.add_text(x, y, text, isa='button')

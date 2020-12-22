@@ -1,7 +1,7 @@
 import colorsys
 import random
 
-from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Clock
+from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Clock, Result
 
 
 class Color:
@@ -18,9 +18,18 @@ class Color:
     def __repr__(self):
         return str((self.h, self.s, self.l))
 
+    def __eq__(self, other):
+        if isinstance(other, Color):
+            return self.h == other.h and self.s == other.s and self.l == other.l
+        return False
+
 
 class ColorClassificationTask(Task):
-    N_BLOCKS = 1
+    N_COLORS = 12
+    N_BLOCKS = 3
+    BASE_FREQ = 4
+    EXP_FREQ = 19
+    CONDITIONS = {'B': None, 'E2': 2, 'E7': 7}
     COLORS = {1: Color(s=.15, l=.64),
               2: Color(s=.56, l=.74),
               3: Color(s=.32, l=.59),
@@ -40,46 +49,59 @@ class ColorClassificationTask(Task):
         super().__init__()
         self.display = env.display
         self.keyboard = env.keyboard
-        self.corrects = corrects or Data(self.N_BLOCKS)
+        self.corrects = corrects or Data(self.N_COLORS)
         self.responded = False
         self.done = False
+        self.condition_pairs = self.__create_conditions()
+        self.curr_condition = 'B'
 
     def run(self, time):
 
         def handle_key(key):
             if str(key) == str(self.trial_category):
                 self.log('correct response')
-                self.corrects.add(self.block, 1)
+                self.corrects.add(self.color_num, 1)
                 self.responded = True
 
         self.keyboard.add_type_fn(handle_key)
 
         for block in range(self.N_BLOCKS):
-            self.block = block
-            pairs = self.PAIRS.copy()
-            random.shuffle(pairs)
+            pairs = self.condition_pairs[self.curr_condition]
             for num, category in pairs:
+                self.color_num = num - 1
                 color = self.COLORS[num]
                 self.trial_start = self.time()
                 self.trial_category = category
                 self.responded = False
                 self.display.clear()
-                color_visual = self.display.add_color(50, 50, 50, 50, color, isa='color')
+                color_visual = self.display.add_color(50, 50, 15, color, isa='color')
                 self.display.set_attend(color_visual)
                 self.wait(5.0)
                 if not self.responded:
                     self.log('incorrect response')
-                    self.corrects.add(self.block, 0)
+                    self.corrects.add(self.color_num, 0)
                 self.display.clear()
                 category_visual = self.display.add_text(50, 50, category)
                 self.display.set_attend(category_visual)
                 self.wait(5.0)
 
+    def __create_conditions(self):
+        pairs = []
+        for i in range(self.BASE_FREQ):
+            pairs.extend(self.PAIRS.copy())
+        condition_pairs = {condition: pairs.copy() for condition in self.CONDITIONS.keys()}
+        for condition, exp in self.CONDITIONS.items():
+            if exp is not None:
+                for i in range(self.EXP_FREQ-self.BASE_FREQ):
+                    condition_pairs[condition].append(self.PAIRS[exp - 1])
+            random.shuffle(condition_pairs[condition])
+        return condition_pairs
+
 
 class ColorClassificationAgent(Agent):
 
-    def __init__(self, env, output=True, real_time=False):
-        super().__init__(output=output, clock=Clock(real_time=real_time, output=output))
+    def __init__(self, env, output=False):
+        super().__init__(output=output)
         self.memory = Memory(self, Memory.OPTIMIZED_DECAY)
         self.vision = Vision(self, env.display)
         self.motor = Motor(self, self.vision, env)
@@ -95,35 +117,34 @@ class ColorClassificationAgent(Agent):
             chunk = self.memory.recall(color=color)
             if chunk:
                 self.motor.type(chunk.get('category'))
-            visual = self.vision.wait_for(isa='category')
+            visual = self.vision.wait_for(isa='text')
             category = self.vision.encode(visual)
             self.memory.store(color=color, category=category)
 
 
 class ColorClassificationSimulation():
-    HUMAN_CORRECT = [.000, .526, .667, .798, .887, .924, .958, .954]
+    HUMAN_CORRECT = {'B': [.318, .123, .513, .113, .175, .337, .13, .162, .372, .097, .143, .272],
+                     'E2': [.296, .026, .46, .067, .114, .328, .181, .116, .409, .05, .103, .223],
+                     'E7': [.308, .147, .555, .103, .16, .384, .039, .131, .345, .066, .146, .267]}
+    #TRIALS = {'B': 48, 'E2': 63, 'E7': 63}
+    TRIALS = {'B': 1, 'E2': 1, 'E7': 1}
 
-    # HUMAN_CORRECT = [.318, .123, .513, .113, .175, .337, .13, .162, .372]
+    def run(self, output=False, real_time=False, print_results=False):
 
-    def __init__(self, n_sims=10):
-        self.n_sims = n_sims
+        for condition, n_trials in self.TRIALS.items():
+            corrects = Data(ColorClassificationTask.N_COLORS)
 
-    def run(self, output=False, real_time=False):
-        corrects = Data(ColorClassificationTask.N_BLOCKS)
+            for _ in range(n_trials):
+                env = Environment(window=(500, 500))
+                task = ColorClassificationTask(env, corrects=corrects)
+                agent = ColorClassificationAgent(env)
+                World(task, agent).run(1590, output=output, real_time=real_time)
 
-        for _ in range(self.n_sims):
-            env = Environment(window=(500, 500))
-            task = ColorClassificationTask(env, corrects=corrects)
-            agent = ColorClassificationAgent(env, output=output, real_time=real_time)
-            World(task, agent).run(1590)
+            learning_error = Result(corrects.proportion(0), self.HUMAN_CORRECT[condition])
 
-        result_correct = corrects.analyze(self.HUMAN_CORRECT)
-
-        if output:
-            result_correct.output("Correctness", 2)
-
-        return result_correct  # (result_correct, result_rt)
+            if print_results:
+                learning_error.output("Proportion of Learning Errors for " + condition, 2)
 
 
 if __name__ == '__main__':
-    ColorClassificationSimulation().run(output=True, real_time=True)
+    ColorClassificationSimulation().run(output=False, real_time=False, print_results=True)

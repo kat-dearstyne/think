@@ -94,7 +94,7 @@ try:
                         self.draw_rect(v, dw=20, dh=20, color=(16, 16, 16))
                 elif v.isa == 'color':
                     color = (0, 0, 0) if not hasattr(v.obj, 'rgb') else v.obj.rgb
-                    self.draw_rect(v, color=color, stroke=0)
+                    self.draw_circle(v, dr=v.w, color=color, stroke=0)
                 else:
                     self.draw_rect(v, stroke=3)
 
