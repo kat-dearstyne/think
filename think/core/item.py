@@ -50,10 +50,11 @@ class Item:
 
 class SlotQuery:
 
-    def __init__(self, slot, op, val):
+    def __init__(self, slot, op, val, sim=None):
         self.slot = slot
         self.op = op
         self.val = val
+        self.sim = sim
 
     def matches(self, item):
         val = item.get(self.slot)
@@ -69,6 +70,8 @@ class SlotQuery:
             return val < self.val
         elif self.op == '<=':
             return val <= self.val
+        elif self.op == '~=':
+            return self.sim(self.val, val)
         else:
             return False
 
@@ -78,10 +81,15 @@ class SlotQuery:
 
 class Query:
 
-    def __init__(self, **slotvals):
+    def __init__(self, similarities=None, **slotvals):
         self.slotqs = []
+        self.partial_matching = similarities is not None
         for slot, val in slotvals.items():
-            self.eq(slot, val)
+            if similarities and slot in similarities:
+                self.pm(slot, val, similarities[slot])
+            else:
+                self.eq(slot, val)
+            self.slot = val
 
     def eq(self, slot, val):
         self.slotqs.append(SlotQuery(slot, '=', val))
@@ -107,6 +115,10 @@ class Query:
         self.slotqs.append(SlotQuery(slot, '<=', val))
         return self
 
+    def pm(self, slot, val, sim):  # partial match
+        self.slotqs.append(SlotQuery(slot, '~=', val, sim=sim))
+        return self
+
     def get(self, slot, op=None, val=None):
         for slotq in self.slotqs:
             if (slot == slotq.slot and (op is None or op == slotq.op)
@@ -122,6 +134,15 @@ class Query:
             if not slotq.matches(item):
                 return False
         return True
+
+    def partial_matches(self, item):
+        sum = 0
+        for slotq in self.slotqs:
+            matches = slotq.matches(item)
+            if not isinstance(matches, float):
+                matches = -1 + float(matches)
+            sum += matches
+        return sum
 
     def __str__(self):
         return '[' + ', '.join(map(str, self.slotqs)) + ']'

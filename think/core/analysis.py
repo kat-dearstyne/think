@@ -119,7 +119,7 @@ class Values:
             res = 0
             for i in range(self.size()):
                 res += (self.get(i) - m1) * (values.get(i) - m2)
-            return res / ((self.size() - 1) * sd1 * sd2)
+            return 0 if sd1 == 0 or sd2 == 0 else res / ((self.size() - 1) * sd1 * sd2)
         else:
             return None
 

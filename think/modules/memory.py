@@ -27,12 +27,11 @@ class Chunk(Item):
 
 
 class Memory(Module):
-
     NO_DECAY = 1
     OPTIMIZED_DECAY = 2
     ADVANCED_DECAY = 3
 
-    def __init__(self, agent, decay=None):
+    def __init__(self, agent, decay=None, match_scale=0):
         super().__init__('memory', agent)
         self.decay = decay or Memory.NO_DECAY
         self.chunks = {}
@@ -41,6 +40,7 @@ class Memory(Module):
         self.retrieval_threshold = 0.0
         self.latency_factor = 1.0
         self.activation_noise = None
+        self.match_scale = match_scale
         self._unique = 1
 
     def _uniquify(self, id):
@@ -113,8 +113,10 @@ class Memory(Module):
             chunk.activation = base_level
             return chunk.activation
 
-    def _compute_transient_act(self, chunk):
+    def _compute_transient_act(self, chunk, sim_val=None):
         act = self._compute_activation(chunk)
+        if sim_val is not None:
+            act += self.match_scale * sim_val
         if self.activation_noise is not None:
             act += random.gauss(0, self.activation_noise)
         chunk.transient_activation = act
@@ -132,22 +134,51 @@ class Memory(Module):
         return self.latency_factor * math.exp(min(-chunk.activation, self.retrieval_threshold))
 
     def _get_chunk(self, query):
-        matches = []
-        for chunk in self.chunks.values():
-            if query.matches(chunk):
-                matches.append(chunk)
+        matches, sim_vals = self._get_query_matches(query)
         best_chunk = None
         best_act = self.retrieval_threshold
-        for chunk in matches:
-            act = self._compute_transient_act(chunk)
+        for i in range(len(matches)):
+            chunk = matches[i]
+            sim_val = None if len(sim_vals) <= i else sim_vals[i]
+            act = self._compute_transient_act(chunk, sim_val)
             if act > best_act:
                 best_chunk = chunk
                 best_act = act
         return best_chunk
 
-    def start_recall(self, query=None, **kwargs):
-        if not query or not isinstance(query, Query):
+    def get_blended_chunk(self, slots, query=None, **kwargs):
+        if not isinstance(query, Query):
             query = Query(**kwargs)
+        matches, sim_vals = self._get_query_matches(query)
+        new_slots = kwargs
+        if not isinstance(slots, list):
+            slots = [slots]
+        for slot in slots:
+            sum = 0
+            divisor = 0
+            for i in range(len(matches)):
+                chunk = matches[i]
+                sim_val = None if len(sim_vals) <= i else sim_vals[i]
+                act = self._compute_transient_act(chunk, sim_val)
+                sum += act * chunk.get(slot)
+                divisor += act
+            new_slots[slot] = sum/divisor
+        return Chunk(**new_slots)
+
+    def _get_query_matches(self, query):
+        matches = []
+        sim_vals = []
+        for chunk in self.chunks.values():
+            if self.match_scale:
+                matches.append(chunk)
+                sim_vals.append(query.partial_matches(chunk))
+            elif query.matches(chunk):
+                matches.append(chunk)
+        return matches, sim_vals
+
+    def start_recall(self, query=None, similarities=None, **kwargs):
+        if not query or not isinstance(query, Query):
+            query = Query(similarities=similarities, **kwargs)
         self.buffer.acquire()
         self.think('recall {}'.format(query))
         self.log('recalling {}'.format(query))
@@ -165,21 +196,21 @@ class Memory(Module):
     def _start_recall(self, chunk):
         if chunk is not None:
             duration = self.latency_factor * \
-                math.exp(-chunk.transient_activation)
+                       math.exp(-chunk.transient_activation)
             self.buffer.set(chunk, duration, 'recalled {}'.format(
                 chunk), lambda: self._add_use(chunk))
         else:
             duration = self.latency_factor * \
-                math.exp(-self.retrieval_threshold)
+                       math.exp(-self.retrieval_threshold)
             self.buffer.clear(duration, 'recall failed')
 
     def get_recalled(self):
         return self.buffer.get_and_release()
 
-    def recall(self, query=None, **kwargs):
+    def recall(self, query=None, similarities=None, **kwargs):
         if not query or not isinstance(query, Query):
-            query = Query(**kwargs)
-        self.start_recall(query)
+            query = Query(similarities=similarities, **kwargs)
+        self.start_recall(query, similarities=similarities)
         return self.get_recalled()
 
     def recall_by_id(self, id):
