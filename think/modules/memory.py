@@ -146,9 +146,9 @@ class Memory(Module):
                 best_act = act
         return best_chunk
 
-    def get_blended_chunk(self, slots, query=None, **kwargs):
+    def get_blended_chunk(self, slots, query=None, similarities=None, **kwargs):
         if not isinstance(query, Query):
-            query = Query(**kwargs)
+            query = Query(similarities=similarities, **kwargs)
         matches, sim_vals = self._get_query_matches(query)
         new_slots = kwargs
         if not isinstance(slots, list):

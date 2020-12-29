@@ -1,27 +1,8 @@
-import colorsys
 import random
 
-from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result
+from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
 
-
-class Color:
-
-    def __init__(self, h=0.0, s=0.0, l=0.0):
-        self.h = h  # hue
-        self.s = s  # saturation
-        self.l = l  # lightness
-        self.rgb = self.__convert_to_rgb(h, s, l)
-
-    def __convert_to_rgb(self, h, s, l):
-        return tuple(round(i * 255) for i in colorsys.hls_to_rgb(h, s / 100, l / 100))
-
-    def __repr__(self):
-        return str((self.h, self.s, self.l))
-
-    def __eq__(self, other):
-        if isinstance(other, Color):
-            return self.h == other.h and self.s == other.s and self.l == other.l
-        return False
+random.seed(26)
 
 
 class ColorClassificationTask(Task):
@@ -113,8 +94,9 @@ class ColorClassificationAgent(Agent):
     KNOWLEDGE_STRENGTH = 1
     SIM_WEIGHTS = [0, 1.17, .83]
 
-    def __init__(self, env, output=False):
+    def __init__(self, env, output=False, demo_blending=False):
         super().__init__(output=output)
+        self.demo_blending = demo_blending
         self.memory = Memory(self, Memory.OPTIMIZED_DECAY)
         self.vision = Vision(self, env.display)
         self.motor = Motor(self, self.vision, env)
@@ -123,9 +105,9 @@ class ColorClassificationAgent(Agent):
         self.memory.retrieval_threshold = -1.8
         self.memory.latency_factor = .450
         self.memory.match_scale = 5
-        self.__save_knowledge_to_memory()
+        self._save_knowledge_to_memory()
 
-    def __save_knowledge_to_memory(self):
+    def _save_knowledge_to_memory(self):
         for category, colors in self.KNOWLEDGE.items():
             if not isinstance(colors, list):
                 colors = [colors]
@@ -134,11 +116,22 @@ class ColorClassificationAgent(Agent):
                 chunk.use_count = self.KNOWLEDGE_STRENGTH
                 self.memory.store(chunk)
 
+    def _get_similarities(self):
+        return {
+            'h': lambda a, b: self.calculate_similarity_hue(a, b, self.SIM_WEIGHTS[0]),
+            's': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[1]),
+            'l': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[2])
+        }
+
     def calculate_similarity_other(self, val1, val2, w=1.0):
         return (-abs(val1 - val2) / 100) * w
 
     def calculate_similarity_hue(self, hue1, hue2, w=1.0):
         return (-abs(abs(180 - hue1) - abs(180 - hue2)) / 360) * w
+
+    def guess_bias(self):
+        p = random.random()
+        return 1 if p <= .67 else 2
 
     def guess(self):
         return random.randint(1, 2)
@@ -147,19 +140,18 @@ class ColorClassificationAgent(Agent):
         while self.time() < time:
             visual = self.vision.wait_for(isa='color')
             color = self.vision.encode(visual)
-            chunk = self.memory.recall(h=color.h, s=color.s, l=color.l,
-                                       similarities={
-                                           'h': lambda a, b: self.calculate_similarity_hue(a, b, self.SIM_WEIGHTS[0]),
-                                           's': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[1]),
-                                           'l': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[2])
-                                       })
+            chunk = self.memory.recall(h=color.h, s=color.s, l=color.l, similarities=self._get_similarities())
             if chunk:
                 self.motor.type(chunk.get('category'))
             else:
-                self.motor.type(self.guess())
+                self.motor.type(self.guess_bias())
             visual = self.vision.wait_for(isa='text')
             category = self.vision.encode(visual)
             self.memory.store(h=color.h, s=color.s, l=color.l, category=category)
+            if self.demo_blending:
+                blended_chunk = self.memory.get_blended_chunk(slots='s', similarities=self._get_similarities(), h=color.h,
+                                                          l=color.l, category=category)
+                print(blended_chunk)
 
 
 class ColorClassificationSimulation():
@@ -167,8 +159,6 @@ class ColorClassificationSimulation():
                      'E2': [.296, .026, .46, .067, .114, .328, .181, .116, .409, .05, .103, .223],
                      'E7': [.308, .147, .555, .103, .16, .384, .039, .131, .345, .066, .146, .267]}
     TRIALS = {'B': 48, 'E2': 63, 'E7': 63}
-
-    #TRIALS = {'B': 1, 'E2': 1, 'E7': 1}
 
     def run(self, output=False, real_time=False, print_results=False, show_experiment=True):
 

@@ -1,3 +1,4 @@
+import colorsys
 import math
 
 
@@ -213,3 +214,25 @@ class Area(Location):
         else:
             aw = self.h / math.cos(math.pi / 2 - theta)
         return aw
+
+
+class Color:
+
+    def __init__(self, h=0.0, s=0.0, l=0.0):
+        self.h = h  # hue
+        self.s = s  # saturation
+        self.l = l  # lightness
+        self.rgb = self.__convert_to_rgb(h, s, l)
+
+    def __convert_to_rgb(self, h, s, l):
+        return tuple(round(i * 255) for i in colorsys.hls_to_rgb(h, s / 100, l / 100))
+
+    def __repr__(self):
+        return str((self.h, self.s, self.l))
+
+    def __eq__(self, other):
+        if isinstance(other, Color):
+            return self.h == other.h and self.s == other.s and self.l == other.l
+        return False
+
+
