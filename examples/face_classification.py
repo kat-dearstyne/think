@@ -11,9 +11,18 @@ class ColorClassificationTask(Task):
     BASE_FREQ = 4
     EXP_FREQ = 19
     CONDITIONS = {'B': None, 'E2': 2, 'E7': 7}
-    COLORS = [Color(s=15, l=64), Color(s=56, l=74), Color(s=32, l=59), Color(s=65, l=65), Color(s=18, l=51),
-              Color(s=46, l=51), Color(s=78, l=48), Color(s=32, l=42), Color(s=64, l=42), Color(s=12, l=29),
-              Color(s=52, l=26), Color(s=65, l=26)]
+    COLORS = {1: Color(s=15, l=64),
+              2: Color(s=56, l=74),
+              3: Color(s=32, l=59),
+              4: Color(s=65, l=65),
+              5: Color(s=18, l=51),
+              6: Color(s=46, l=51),
+              7: Color(s=78, l=48),
+              8: Color(s=32, l=42),
+              9: Color(s=64, l=42),
+              10: Color(s=12, l=29),
+              11: Color(s=52, l=26),
+              12: Color(s=65, l=26)}
     PAIRS = [(1, 1), (2, 2), (3, 2), (4, 2), (5, 1), (6, 2), (7, 2),
              (8, 1), (9, 2), (10, 1), (11, 1), (12, 1)]  # (color, category) pairs
 
@@ -48,13 +57,14 @@ class ColorClassificationTask(Task):
                 self.display.clear()
                 color_visual = self.display.add_color(50, 50, 15, color, isa='color')
                 self.display.set_attend(color_visual)
-                self.wait(5)
+                self.wait(5.0)
                 if not self.responded:
                     self.log('incorrect response')
                     self.corrects.add(self.color_num, 0)
                 self.display.clear()
                 category_visual = self.display.add_text(50, 50, category)
                 self.display.set_attend(category_visual)
+                self.wait(5.0)
 
     def __create_conditions(self):
         pairs = []
@@ -168,4 +178,4 @@ class ColorClassificationSimulation():
 
 
 if __name__ == '__main__':
-    ColorClassificationSimulation().run(output=False, real_time=True, print_results=True, show_experiment=True)
+    ColorClassificationSimulation().run(output=False, real_time=False, print_results=True, show_experiment=False)
