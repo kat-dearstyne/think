@@ -1,6 +1,6 @@
 from .core import (Agent, Area, Buffer, Cancel, Clock, Data, Display,
                    Environment, Item, Keyboard, Location, Module, Mouse,
-                   Process, Query, Result, SlotQuery, Color, Speakers, Task, Values,
+                   Process, Query, Result, SlotQuery, Color, Face, Speakers, Task, Values,
                    Worker, World, get_think_logger)
 from .modules import (Audition, Aural, Chunk, Dwell, Eyes, EyeTracker,
                       Fixation, Gaze, Instruction, Language, Memory, Motor,

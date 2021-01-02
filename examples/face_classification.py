@@ -1,102 +1,84 @@
 import random
 
-from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
+from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Face
 
 random.seed(26)
 
 
-class ColorClassificationTask(Task):
-    N_COLORS = 12
-    N_BLOCKS = 3
-    BASE_FREQ = 4
-    EXP_FREQ = 19
-    CONDITIONS = {'B': None, 'E2': 2, 'E7': 7}
-    COLORS = {1: Color(s=15, l=64),
-              2: Color(s=56, l=74),
-              3: Color(s=32, l=59),
-              4: Color(s=65, l=65),
-              5: Color(s=18, l=51),
-              6: Color(s=46, l=51),
-              7: Color(s=78, l=48),
-              8: Color(s=32, l=42),
-              9: Color(s=64, l=42),
-              10: Color(s=12, l=29),
-              11: Color(s=52, l=26),
-              12: Color(s=65, l=26)}
-    PAIRS = [(1, 1), (2, 2), (3, 2), (4, 2), (5, 1), (6, 2), (7, 2),
-             (8, 1), (9, 2), (10, 1), (11, 1), (12, 1)]  # (color, category) pairs
+class Condition:
 
-    def __init__(self, env, corrects=None):
+    def __init__(self, name, train_stim, exe_num=-1, exe_freq=5):
+        self.name = name
+        self.train_stim = self._create_training_stimuli_nums(train_stim, exe_num, exe_freq)
+
+    def _create_training_stimuli_nums(self, train_stim, exe_num, exe_freq):
+        train_stim = train_stim.copy()
+        if exe_num >= 0:
+            train_stim.extend([exe_num for i in range(exe_freq - 1)])
+        return train_stim
+
+
+class FaceClassificationTask(Task):
+    N_BLOCKS = {'Training': 12, 'Transfer': 2}
+    FACES = [Face(23.5, 21.5, 13.5, 16.5), Face(19.5, 11.5, 18, 12), Face(23.5, 16.5, 13.5, 12), Face(23.5, 16.5, 18, 12),
+             Face(23.5, 16.5, 18, 7.5), Face(15, 11.5, 9, 16.5), Face(19.5, 16.5, 9, 7.5), Face(15, 11.5, 18, 16.5),
+             Face(15, 11.5, 18, 7.5), Face(15, 11.5, 9, 7.5), Face(19.5, 21.5, 9, 7.5), Face(23.5, 11.5, 9, 7.5),
+             Face(15, 21.5, 13.5, 12), Face(19.5, 16.5, 9, 16.5), Face(19.5, 16.5, 9, 12), Face(15, 16.5, 13.5, 16.5),
+             Face(23.5, 11.5, 9, 16.5), Face(15, 11.5, 13.5, 12), Face(15, 21.5, 18, 16.5), Face(19.5, 11.5, 18, 16.5),
+             Face(19.5, 21.5, 9, 7.5), Face(15, 21.5, 18, 12), Face(19.5, 11.5, 13.5, 16.5), Face(15, 16.5, 13.5, 12),
+             Face(15, 16.5, 18, 16.5), Face(19.5, 21.5, 9, 16.5), Face(15, 16.5, 18, 12), Face(19.5, 16.5, 13.5, 7.5),
+             Face(15, 21.5, 13.5, 16.5), Face(15, 11.5, 13.5, 12), Face(23.5, 11.5, 18, 12), Face(19.5, 11.5, 13.5, 12),
+             Face(22.7, 16.5, 16.2, 12), Face(15.9, 12.5, 12.6, 11.1)]
+    CAT = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 1, 2, 2, 1, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2]
+
+    def __init__(self, env, condition, corrects=None):
         super().__init__()
         self.display = env.display
         self.keyboard = env.keyboard
-        self.corrects = corrects or Data(self.N_COLORS)
-        self.responded = False
+        self.corrects = corrects or Data(len(self.FACES))
         self.done = False
-        self.condition_pairs = self.__create_conditions()
-        self.curr_condition = 'B'
+        self.condition = condition
 
     def run(self, time):
 
+        def is_training():
+            return self.phase == 'Training'
+
         def handle_key(key):
-            if str(key) == str(self.trial_category):
-                self.log('correct response')
-                self.corrects.add(self.color_num, 1)
-                self.responded = True
+            if not is_training():
+                if str(key) == str(self.trial_category):
+                    self.log('correct response')
+                    self.corrects.add(self.face_num, 1)
+                else:
+                    self.log('incorrect response')
+                    self.corrects.add(self.face_num, 0)
 
         self.keyboard.add_type_fn(handle_key)
 
-        for block in range(self.N_BLOCKS):
-            pairs = self.condition_pairs[self.curr_condition]
-            for num, category in pairs:
-                self.color_num = num - 1
-                color = self.COLORS[num]
-                self.trial_start = self.time()
-                self.trial_category = category
-                self.responded = False
-                self.display.clear()
-                color_visual = self.display.add_color(50, 50, 15, color, isa='color')
-                self.display.set_attend(color_visual)
-                self.wait(5.0)
-                if not self.responded:
-                    self.log('incorrect response')
-                    self.corrects.add(self.color_num, 0)
-                self.display.clear()
-                category_visual = self.display.add_text(50, 50, category)
-                self.display.set_attend(category_visual)
-                self.wait(5.0)
-
-    def __create_conditions(self):
-        pairs = []
-        for i in range(self.BASE_FREQ):
-            pairs.extend(self.PAIRS.copy())
-        condition_pairs = {condition: pairs.copy() for condition in self.CONDITIONS.keys()}
-        for condition, exp in self.CONDITIONS.items():
-            if exp is not None:
-                for i in range(self.EXP_FREQ - self.BASE_FREQ):
-                    condition_pairs[condition].append(self.PAIRS[exp - 1])
-            random.shuffle(condition_pairs[condition])
-        return condition_pairs
+        for phase in self.N_BLOCKS.keys():
+            self.phase = phase
+            for block in range(self.N_BLOCKS[phase]):
+                face_nums = [i for i in range(len(self.FACES))] if not is_training() else self.condition.train_stim
+                random.shuffle(face_nums)
+                for num in face_nums:
+                    self.face_num = num
+                    self.trial_category = self.CAT[num]
+                    self.trial_start = self.time()
+                    self.display.clear()
+                    face_visual = self.display.add_face(50, 50, self.FACES[num], isa='face')
+                    self.display.set_attend(face_visual)
+                    self.wait(5)
+                    self.display.clear()
+                    category_visual = self.display.add_text(50, 50, self.trial_category)
+                    self.display.set_attend(category_visual)
 
 
-class ColorClassificationAgent(Agent):
-    '''
-    KNOWLEDGE = {
-        1: [Color(0, 75, 65), Color(22, 30, 62), Color(9, 74, 54), Color(10, 54, 68), Color(31, 100, 48), Color(25, 86, 82),
-            Color(19, 45, 36), Color(37, 26, 76), Color(28, 67, 42), Color(30, 69, 80), Color(33, 48, 51),
-            Color(359, 25, 63),
-            Color(26, 79, 50), Color(15, 90, 51)],
-        2: [Color(350, 100, 88), Color(351, 100, 86), Color(330, 59, 100), Color(351, 48, 96), Color(1, 26, 87),
-            Color(342, 46, 99), Color(330, 100, 80), Color(342, 30, 100), Color(350, 100, 84), Color(322, 22, 95),
-            Color(25, 14, 95), Color(343, 13, 99), Color(0, 20, 96), Color(344, 26, 100)]}
-    '''
-    KNOWLEDGE = {1: [Color(11, 45, 35)], 2: [Color(350, 100, 88)]}
-    KNOWLEDGE_STRENGTH = 1
-    SIM_WEIGHTS = [0, 1.17, .83]
+class FaceClassificationAgent(Agent):
+    SIM_WEIGHTS = [1, 1, 1, 1]
+    MAX_MIN = [(23.5, 15), (21.5, 11.5), (18, 9), (16.5, 7.5)]
 
-    def __init__(self, env, output=False, demo_blending=False):
+    def __init__(self, env, output=False):
         super().__init__(output=output)
-        self.demo_blending = demo_blending
         self.memory = Memory(self, Memory.OPTIMIZED_DECAY)
         self.vision = Vision(self, env.display)
         self.motor = Motor(self, self.vision, env)
@@ -105,77 +87,56 @@ class ColorClassificationAgent(Agent):
         self.memory.retrieval_threshold = -1.8
         self.memory.latency_factor = .450
         self.memory.match_scale = 5
-        self._save_knowledge_to_memory()
-
-    def _save_knowledge_to_memory(self):
-        for category, colors in self.KNOWLEDGE.items():
-            if not isinstance(colors, list):
-                colors = [colors]
-            for color in colors:
-                chunk = Chunk(h=color.h, s=color.s, l=color.l, category=category)
-                chunk.use_count = self.KNOWLEDGE_STRENGTH
-                self.memory.store(chunk)
 
     def _get_similarities(self):
-        return {
-            'h': lambda a, b: self.calculate_similarity_hue(a, b, self.SIM_WEIGHTS[0]),
-            's': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[1]),
-            'l': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[2])
-        }
+        return {Face.features[i]: lambda a, b: self.calculate_similarity(a, b, self.MAX_MIN[i], self.SIM_WEIGHTS[i])
+                for i in range(len(Face.features))}
 
-    def calculate_similarity_other(self, val1, val2, w=1.0):
-        return (-abs(val1 - val2) / 100) * w
-
-    def calculate_similarity_hue(self, hue1, hue2, w=1.0):
-        return (-abs(abs(180 - hue1) - abs(180 - hue2)) / 360) * w
-
-    def guess_bias(self):
-        p = random.random()
-        return 1 if p <= .67 else 2
+    def calculate_similarity(self, slot1, slot2, max_min, w=1.0):
+        return (abs(slot1 - slot2) / (max_min[0] - max_min[1])) * w
 
     def guess(self):
         return random.randint(1, 2)
 
     def run(self, time):
         while self.time() < time:
-            visual = self.vision.wait_for(isa='color')
-            color = self.vision.encode(visual)
-            chunk = self.memory.recall(h=color.h, s=color.s, l=color.l, similarities=self._get_similarities())
+            visual = self.vision.wait_for(isa='face')
+            face = self.vision.encode(visual)
+            chunk = self.memory.recall(similarities=self._get_similarities(), eh=face.eh, es=face.es, nl=face.nl, mh=face.mh)
             if chunk:
                 self.motor.type(chunk.get('category'))
             else:
-                self.motor.type(self.guess_bias())
+                self.motor.type(self.guess())
             visual = self.vision.wait_for(isa='text')
             category = self.vision.encode(visual)
-            self.memory.store(h=color.h, s=color.s, l=color.l, category=category)
-            if self.demo_blending:
-                blended_chunk = self.memory.get_blended_chunk(slots='s', similarities=self._get_similarities(), h=color.h,
-                                                          l=color.l, category=category)
-                print(blended_chunk)
+            self.memory.store(eh=face.eh, es=face.es, nl=face.nl, mh=face.mh, category=category)
 
 
-class ColorClassificationSimulation():
-    HUMAN_CORRECT = {'B': [.318, .123, .513, .113, .175, .337, .13, .162, .372, .097, .143, .272],
-                     'E2': [.296, .026, .46, .067, .114, .328, .181, .116, .409, .05, .103, .223],
-                     'E7': [.308, .147, .555, .103, .16, .384, .039, .131, .345, .066, .146, .267]}
-    TRIALS = {'B': 48, 'E2': 63, 'E7': 63}
+class FaceClassificationSimulation:
+    TRAINING_STIMULI = {1: [i for i in range(10)], 2: [8, 12, 17, 19, 22, 23, 25, 27, 28, 32]}
+    CONDITIONS = [Condition('1A', TRAINING_STIMULI[1]), Condition('1B', TRAINING_STIMULI[1], exe_num=7),
+                  Condition('EF', TRAINING_STIMULI[2]), Condition('HF19', TRAINING_STIMULI[2], exe_num=19)]
+    HUMAN_CORRECT = {
+        '1A': [.968, .665, .937, .975, .875, .134, .261, .171, .089, .045, .529, .538, .258, .541, .430, .283, .778,
+               .145, .281, .780, .291, .277, .601, .289, .272, .490, .261, .386, .269, .114, .796, .538, .981, .126]}
 
-    def run(self, output=False, real_time=False, print_results=False, show_experiment=True):
+    def run(self, n_trials=50, output=False, real_time=False, print_results=False, show_experiment=True):
 
-        for condition, n_trials in self.TRIALS.items():
-            corrects = Data(ColorClassificationTask.N_COLORS)
+        for condition in self.CONDITIONS:
+            corrects = Data(len(FaceClassificationTask.FACES))
 
             for _ in range(n_trials):
                 env = Environment(window=(500, 500) if show_experiment else None)
-                task = ColorClassificationTask(env, corrects=corrects)
-                agent = ColorClassificationAgent(env)
-                World(task, agent).run(1590, output=output, real_time=real_time)
+                task = FaceClassificationTask(env, condition, corrects=corrects)
+                agent = FaceClassificationAgent(env)
+                World(task, agent).run(2400, output=output, real_time=real_time)  # TODO figure out time
 
-            learning_error = Result(corrects.proportion(0), self.HUMAN_CORRECT[condition])
+            learning_error = corrects.analyze(self.HUMAN_CORRECT[condition.name])
 
             if print_results:
-                learning_error.output("Proportion of Learning Errors for " + condition, 2)
+                learning_error.output("Proportion of Learning Errors for " + condition.name, 2)
+            break
 
 
 if __name__ == '__main__':
-    ColorClassificationSimulation().run(output=False, real_time=False, print_results=True, show_experiment=False)
+    FaceClassificationSimulation().run(output=False, real_time=False, print_results=True, show_experiment=False)

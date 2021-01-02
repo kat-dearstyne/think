@@ -53,6 +53,9 @@ class Display:
     def add_color(self, x, y, r, color, isa='color'):
         return self.add(x, y, r, r, isa, color)
 
+    def add_face(self, x, y, face, isa='face'):
+        return self.add(x, y, face.w, face.h, isa, face)
+
     def add_button(self, x, y, text):
         return self.add_text(x, y, text, isa='button')
 
@@ -206,3 +209,7 @@ class Environment:
         self.speakers = Speakers()
         self.keyboard = Keyboard()
         self.mouse = Mouse(self.display)
+
+
+
+

@@ -162,7 +162,7 @@ class Memory(Module):
                 act = self._compute_transient_act(chunk, sim_val)
                 sum += act * chunk.get(slot)
                 divisor += act
-            new_slots[slot] = sum/divisor
+            new_slots[slot] = sum / divisor
         return Chunk(**new_slots)
 
     def _get_query_matches(self, query):
