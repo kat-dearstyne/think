@@ -2,30 +2,37 @@ import random
 
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
 
-random.seed(26)
+random.seed(0)
+
+
+class Condition:
+    BASE_FREQ = 4
+
+    def __init__(self, name, train_stim, exe_num=-1, exe_freq=19):
+        self.name = name
+        self.train_stim = self._create_training_stimuli_nums(train_stim, exe_num, exe_freq)
+
+    def _create_training_stimuli_nums(self, train_stim, exe_num, exe_freq):
+        train_stim = train_stim.copy()
+        if exe_num >= 0:
+            train_stim.extend([exe_num for i in range(exe_freq - 1)])
+        return train_stim
 
 
 class ColorClassificationTask(Task):
-    N_COLORS = 12
     N_BLOCKS = 3
-    BASE_FREQ = 4
-    EXP_FREQ = 19
-    CONDITIONS = {'B': None, 'E2': 2, 'E7': 7}
     COLORS = [Color(s=15, l=64), Color(s=56, l=74), Color(s=32, l=59), Color(s=65, l=65), Color(s=18, l=51),
               Color(s=46, l=51), Color(s=78, l=48), Color(s=32, l=42), Color(s=64, l=42), Color(s=12, l=29),
               Color(s=52, l=26), Color(s=65, l=26)]
-    PAIRS = [(1, 1), (2, 2), (3, 2), (4, 2), (5, 1), (6, 2), (7, 2),
-             (8, 1), (9, 2), (10, 1), (11, 1), (12, 1)]  # (color, category) pairs
+    CAT = [1, 2, 2, 2, 1, 2, 2, 1, 2, 1, 1, 1]  # (color, category) pairs
 
-    def __init__(self, env, corrects=None):
+    def __init__(self, env, condition, corrects=None):
         super().__init__()
         self.display = env.display
         self.keyboard = env.keyboard
-        self.corrects = corrects or Data(self.N_COLORS)
-        self.responded = False
+        self.corrects = corrects or Data(len(self.COLORS))
         self.done = False
-        self.condition_pairs = self.__create_conditions()
-        self.curr_condition = 'B'
+        self.condition = condition
 
     def run(self, time):
 
@@ -33,53 +40,29 @@ class ColorClassificationTask(Task):
             if str(key) == str(self.trial_category):
                 self.log('correct response')
                 self.corrects.add(self.color_num, 1)
-                self.responded = True
+            else:
+                self.log('incorrect response')
+                self.corrects.add(self.color_num, 0)
 
         self.keyboard.add_type_fn(handle_key)
 
         for block in range(self.N_BLOCKS):
-            pairs = self.condition_pairs[self.curr_condition]
-            for num, category in pairs:
-                self.color_num = num - 1
-                color = self.COLORS[num]
+            color_nums = self.condition.train_stim
+            random.shuffle(color_nums)
+            for num in color_nums:
+                self.color_num = num
                 self.trial_start = self.time()
-                self.trial_category = category
-                self.responded = False
+                self.trial_category = self.CAT[num]
                 self.display.clear()
-                color_visual = self.display.add_color(50, 50, 15, color, isa='color')
+                color_visual = self.display.add_color(50, 50, 15, self.COLORS[num], isa='color')
                 self.display.set_attend(color_visual)
                 self.wait(5)
-                if not self.responded:
-                    self.log('incorrect response')
-                    self.corrects.add(self.color_num, 0)
                 self.display.clear()
-                category_visual = self.display.add_text(50, 50, category)
+                category_visual = self.display.add_text(50, 50, self.trial_category)
                 self.display.set_attend(category_visual)
-
-    def __create_conditions(self):
-        pairs = []
-        for i in range(self.BASE_FREQ):
-            pairs.extend(self.PAIRS.copy())
-        condition_pairs = {condition: pairs.copy() for condition in self.CONDITIONS.keys()}
-        for condition, exp in self.CONDITIONS.items():
-            if exp is not None:
-                for i in range(self.EXP_FREQ - self.BASE_FREQ):
-                    condition_pairs[condition].append(self.PAIRS[exp - 1])
-            random.shuffle(condition_pairs[condition])
-        return condition_pairs
 
 
 class ColorClassificationAgent(Agent):
-    '''
-    KNOWLEDGE = {
-        1: [Color(0, 75, 65), Color(22, 30, 62), Color(9, 74, 54), Color(10, 54, 68), Color(31, 100, 48), Color(25, 86, 82),
-            Color(19, 45, 36), Color(37, 26, 76), Color(28, 67, 42), Color(30, 69, 80), Color(33, 48, 51),
-            Color(359, 25, 63),
-            Color(26, 79, 50), Color(15, 90, 51)],
-        2: [Color(350, 100, 88), Color(351, 100, 86), Color(330, 59, 100), Color(351, 48, 96), Color(1, 26, 87),
-            Color(342, 46, 99), Color(330, 100, 80), Color(342, 30, 100), Color(350, 100, 84), Color(322, 22, 95),
-            Color(25, 14, 95), Color(343, 13, 99), Color(0, 20, 96), Color(344, 26, 100)]}
-    '''
     KNOWLEDGE = {1: [Color(11, 45, 35)], 2: [Color(350, 100, 88)]}
     KNOWLEDGE_STRENGTH = 1
     SIM_WEIGHTS = [0, 1.17, .83]
@@ -114,7 +97,7 @@ class ColorClassificationAgent(Agent):
         }
 
     def calculate_similarity_other(self, val1, val2, w=1.0):
-        return (-abs(val1 - val2) / 100) * w
+        return (abs(val1 - val2) / 100) * w
 
     def calculate_similarity_hue(self, hue1, hue2, w=1.0):
         return (-abs(abs(180 - hue1) - abs(180 - hue2)) / 360) * w
@@ -140,32 +123,33 @@ class ColorClassificationAgent(Agent):
             self.memory.store(h=color.h, s=color.s, l=color.l, category=category)
             if self.demo_blending:
                 blended_chunk = self.memory.get_blended_chunk(slots='s', similarities=self._get_similarities(), h=color.h,
-                                                          l=color.l, category=category)
+                                                              l=color.l, category=category)
                 print(blended_chunk)
 
 
-class ColorClassificationSimulation():
+class ColorClassificationSimulation:
+    TRAIN_STIM = [i for i in range(len(ColorClassificationTask.COLORS))]
+    CONDITIONS = [Condition('B', TRAIN_STIM), Condition('E2', TRAIN_STIM, exe_num=1), Condition('E7', TRAIN_STIM, exe_num=6)]
     HUMAN_CORRECT = {'B': [.318, .123, .513, .113, .175, .337, .13, .162, .372, .097, .143, .272],
                      'E2': [.296, .026, .46, .067, .114, .328, .181, .116, .409, .05, .103, .223],
                      'E7': [.308, .147, .555, .103, .16, .384, .039, .131, .345, .066, .146, .267]}
-    TRIALS = {'B': 48, 'E2': 63, 'E7': 63}
 
-    def run(self, output=False, real_time=False, print_results=False, show_experiment=True):
+    def run(self, n_trials=50, output=False, real_time=False, print_results=False, show_experiment=True):
 
-        for condition, n_trials in self.TRIALS.items():
-            corrects = Data(ColorClassificationTask.N_COLORS)
+        for condition in self.CONDITIONS:
+            corrects = Data(len(ColorClassificationTask.COLORS))
 
             for _ in range(n_trials):
                 env = Environment(window=(500, 500) if show_experiment else None)
-                task = ColorClassificationTask(env, corrects=corrects)
+                task = ColorClassificationTask(env, condition, corrects=corrects)
                 agent = ColorClassificationAgent(env)
-                World(task, agent).run(1590, output=output, real_time=real_time)
+                World(task, agent).run(1590, output=output, real_time=real_time)  # TODO figure out time
 
-            learning_error = Result(corrects.proportion(0), self.HUMAN_CORRECT[condition])
+            learning_error = Result(corrects.proportion(0), self.HUMAN_CORRECT[condition.name])
 
             if print_results:
-                learning_error.output("Proportion of Learning Errors for " + condition, 2)
+                learning_error.output("Proportion of Learning Errors for " + condition.name, 2)
 
 
 if __name__ == '__main__':
-    ColorClassificationSimulation().run(output=False, real_time=True, print_results=True, show_experiment=True)
+    ColorClassificationSimulation().run(output=False, real_time=False, print_results=True, show_experiment=False)
