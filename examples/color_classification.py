@@ -2,10 +2,10 @@ import random
 
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
 
-random.seed(0)
+random.seed(20)
 
 
-class Condition:
+class Condition:  # TODO where should this go
     BASE_FREQ = 4
 
     def __init__(self, name, train_stim, exe_num=-1, exe_freq=19):
@@ -89,17 +89,17 @@ class ColorClassificationAgent(Agent):
                 chunk.use_count = self.KNOWLEDGE_STRENGTH
                 self.memory.store(chunk)
 
-    def _get_similarities(self):
+    def _get_distances(self):
         return {
-            'h': lambda a, b: self.calculate_similarity_hue(a, b, self.SIM_WEIGHTS[0]),
-            's': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[1]),
-            'l': lambda a, b: self.calculate_similarity_other(a, b, self.SIM_WEIGHTS[2])
+            'h': lambda a, b: self.calculate_distances_hue(a, b, self.SIM_WEIGHTS[0]),
+            's': lambda a, b: self.calculate_distances_other(a, b, self.SIM_WEIGHTS[1]),
+            'l': lambda a, b: self.calculate_distances_other(a, b, self.SIM_WEIGHTS[2])
         }
 
-    def calculate_similarity_other(self, val1, val2, w=1.0):
+    def calculate_distances_other(self, val1, val2, w=1.0):
         return (abs(val1 - val2) / 100) * w
 
-    def calculate_similarity_hue(self, hue1, hue2, w=1.0):
+    def calculate_distances_hue(self, hue1, hue2, w=1.0):
         return (-abs(abs(180 - hue1) - abs(180 - hue2)) / 360) * w
 
     def guess_bias(self):
@@ -113,7 +113,8 @@ class ColorClassificationAgent(Agent):
         while self.time() < time:
             visual = self.vision.wait_for(isa='color')
             color = self.vision.encode(visual)
-            chunk = self.memory.recall(h=color.h, s=color.s, l=color.l, similarities=self._get_similarities())
+            chunk = self.memory.recall(distances=self._get_distances(), h=color.h,
+                                       s=color.s, l=color.l)
             if chunk:
                 self.motor.type(chunk.get('category'))
             else:
@@ -122,7 +123,7 @@ class ColorClassificationAgent(Agent):
             category = self.vision.encode(visual)
             self.memory.store(h=color.h, s=color.s, l=color.l, category=category)
             if self.demo_blending:
-                blended_chunk = self.memory.get_blended_chunk(slots='s', similarities=self._get_similarities(), h=color.h,
+                blended_chunk = self.memory.get_blended_chunk(slots='s', distances=self._get_distances(), h=color.h,
                                                               l=color.l, category=category)
                 print(blended_chunk)
 
@@ -143,7 +144,7 @@ class ColorClassificationSimulation:
                 env = Environment(window=(500, 500) if show_experiment else None)
                 task = ColorClassificationTask(env, condition, corrects=corrects)
                 agent = ColorClassificationAgent(env)
-                World(task, agent).run(1590, output=output, real_time=real_time)  # TODO figure out time
+                World(task, agent).run(1590, output=output, real_time=real_time)
 
             learning_error = Result(corrects.proportion(0), self.HUMAN_CORRECT[condition.name])
 

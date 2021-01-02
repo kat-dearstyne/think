@@ -51,11 +51,11 @@ class Item:
 
 class SlotQuery:
 
-    def __init__(self, slot, op, val, sim=None):
+    def __init__(self, slot, op, val, dist=None):
         self.slot = slot
         self.op = op
         self.val = val
-        self.sim = sim
+        self.dist = dist
 
     def matches(self, item):
         val = item.get(self.slot)
@@ -72,7 +72,7 @@ class SlotQuery:
         elif self.op == '<=':
             return val <= self.val
         elif self.op == '~=':
-            return self.sim(self.val, val)
+            return self.dist(self.val, val)
         else:
             return False
 
@@ -82,12 +82,12 @@ class SlotQuery:
 
 class Query:
 
-    def __init__(self, similarities=None, **slotvals):
+    def __init__(self, distances=None, **slotvals):
         self.slotqs = []
-        self.partial_matching = similarities is not None
+        self.partial_matching = distances is not None
         for slot, val in slotvals.items():
-            if similarities and slot in similarities:
-                self.pm(slot, val, similarities[slot])
+            if distances and slot in distances:
+                self.dist(slot, val, distances[slot])
             else:
                 self.eq(slot, val)
             self.slot = val
@@ -116,8 +116,8 @@ class Query:
         self.slotqs.append(SlotQuery(slot, '<=', val))
         return self
 
-    def pm(self, slot, val, sim):  # partial match
-        self.slotqs.append(SlotQuery(slot, '~=', val, sim=sim))
+    def dist(self, slot, val, dist):  # used for partial match
+        self.slotqs.append(SlotQuery(slot, '~=', val, dist=dist))
         return self
 
     def get(self, slot, op=None, val=None):
@@ -137,13 +137,16 @@ class Query:
         return True
 
     def partial_matches(self, item):
-        sum = 0
+        total = 0
         for slotq in self.slotqs:
             matches = slotq.matches(item)
             if not isinstance(matches, float):
                 matches = -1 + float(matches)
-            sum += matches
-        return sum
+            total += matches ** 2
+        return self._sim_exp(total)
+
+    def _sim_exp(self, total_dist, c=1):
+        return math.e ** (-c * math.sqrt(total_dist)) - 1
 
     def __str__(self):
         return '[' + ', '.join(map(str, self.slotqs)) + ']'

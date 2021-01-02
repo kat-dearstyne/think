@@ -133,6 +133,22 @@ class Memory(Module):
     def compute_recall_time(self, chunk):
         return self.latency_factor * math.exp(min(-chunk.activation, self.retrieval_threshold))
 
+    def get_best_slot_val(self, slot, query=None, distances=None, **kwargs):
+        if not isinstance(query, Query):
+            query = Query(distances=distances, **kwargs)
+        matches, sim_vals = self._get_query_matches(query)
+        vals = {}
+        for i in range(len(matches)):
+            chunk = matches[i]
+            sim_val = None if len(sim_vals) <= i else sim_vals[i]
+            act = self._compute_transient_act(chunk, sim_val)
+            if act > self.retrieval_threshold:
+                val = chunk.get(slot)
+                if val not in vals:
+                    vals[val] = 0
+                vals[val] += act
+        return None if not vals else max(vals, key=vals.get)
+
     def _get_chunk(self, query):
         matches, sim_vals = self._get_query_matches(query)
         best_chunk = None
@@ -146,23 +162,24 @@ class Memory(Module):
                 best_act = act
         return best_chunk
 
-    def get_blended_chunk(self, slots, query=None, similarities=None, **kwargs):
+    def get_blended_chunk(self, slots, query=None, distances=None, **kwargs):
         if not isinstance(query, Query):
-            query = Query(similarities=similarities, **kwargs)
+            query = Query(distances=distances, **kwargs)
         matches, sim_vals = self._get_query_matches(query)
         new_slots = kwargs
         if not isinstance(slots, list):
             slots = [slots]
         for slot in slots:
-            sum = 0
-            divisor = 0
+            weighted_sum = 0
+            total_act = 0
             for i in range(len(matches)):
                 chunk = matches[i]
                 sim_val = None if len(sim_vals) <= i else sim_vals[i]
                 act = self._compute_transient_act(chunk, sim_val)
-                sum += act * chunk.get(slot)
-                divisor += act
-            new_slots[slot] = sum / divisor
+                if act > self.retrieval_threshold:
+                    weighted_sum += act * chunk.get(slot)
+                    total_act += act
+            new_slots[slot] = weighted_sum / total_act
         return Chunk(**new_slots)
 
     def _get_query_matches(self, query):
@@ -176,9 +193,9 @@ class Memory(Module):
                 matches.append(chunk)
         return matches, sim_vals
 
-    def start_recall(self, query=None, similarities=None, **kwargs):
+    def start_recall(self, query=None, distances=None, **kwargs):
         if not query or not isinstance(query, Query):
-            query = Query(similarities=similarities, **kwargs)
+            query = Query(distances=distances, **kwargs)
         self.buffer.acquire()
         self.think('recall {}'.format(query))
         self.log('recalling {}'.format(query))
@@ -207,10 +224,10 @@ class Memory(Module):
     def get_recalled(self):
         return self.buffer.get_and_release()
 
-    def recall(self, query=None, similarities=None, **kwargs):
+    def recall(self, query=None, distances=None, **kwargs):
         if not query or not isinstance(query, Query):
-            query = Query(similarities=similarities, **kwargs)
-        self.start_recall(query, similarities=similarities)
+            query = Query(distances=distances, **kwargs)
+        self.start_recall(query, distances=distances)
         return self.get_recalled()
 
     def recall_by_id(self, id):

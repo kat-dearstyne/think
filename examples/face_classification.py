@@ -1,11 +1,11 @@
 import random
 
-from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Face
+from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Face, Result
 
-random.seed(26)
+random.seed(20)
 
 
-class Condition:
+class Condition:  # TODO where should this go
 
     def __init__(self, name, train_stim, exe_num=-1, exe_freq=5):
         self.name = name
@@ -35,7 +35,7 @@ class FaceClassificationTask(Task):
         super().__init__()
         self.display = env.display
         self.keyboard = env.keyboard
-        self.corrects = corrects or Data(len(self.FACES))
+        self.selected_categories = corrects or Data(len(self.FACES))
         self.done = False
         self.condition = condition
 
@@ -46,12 +46,7 @@ class FaceClassificationTask(Task):
 
         def handle_key(key):
             if not is_training():
-                if str(key) == str(self.trial_category):
-                    self.log('correct response')
-                    self.corrects.add(self.face_num, 1)
-                else:
-                    self.log('incorrect response')
-                    self.corrects.add(self.face_num, 0)
+                self.selected_categories.add(self.face_num, int(key))
 
         self.keyboard.add_type_fn(handle_key)
 
@@ -62,20 +57,19 @@ class FaceClassificationTask(Task):
                 random.shuffle(face_nums)
                 for num in face_nums:
                     self.face_num = num
-                    self.trial_category = self.CAT[num]
                     self.trial_start = self.time()
                     self.display.clear()
                     face_visual = self.display.add_face(50, 50, self.FACES[num], isa='face')
                     self.display.set_attend(face_visual)
                     self.wait(5)
                     self.display.clear()
-                    category_visual = self.display.add_text(50, 50, self.trial_category)
+                    category_visual = self.display.add_text(50, 50, self.CAT[num])
                     self.display.set_attend(category_visual)
 
 
 class FaceClassificationAgent(Agent):
-    SIM_WEIGHTS = [1, 1, 1, 1]
-    MAX_MIN = [(23.5, 15), (21.5, 11.5), (18, 9), (16.5, 7.5)]
+    SIM_WEIGHTS = [1.3, 1.3, .7, .7]
+    MAX_MIN = [(23.5, 15), (21.5, 11.5), (18, 9), (16.5, 7.5)]  # TODO move somewhere?
 
     def __init__(self, env, output=False):
         super().__init__(output=output)
@@ -86,7 +80,7 @@ class FaceClassificationAgent(Agent):
         self.memory.activation_noise = .5
         self.memory.retrieval_threshold = -1.8
         self.memory.latency_factor = .450
-        self.memory.match_scale = 5
+        self.memory.match_scale = 10
 
     def _get_similarities(self):
         return {Face.features[i]: lambda a, b: self.calculate_similarity(a, b, self.MAX_MIN[i], self.SIM_WEIGHTS[i])
@@ -102,7 +96,7 @@ class FaceClassificationAgent(Agent):
         while self.time() < time:
             visual = self.vision.wait_for(isa='face')
             face = self.vision.encode(visual)
-            chunk = self.memory.recall(similarities=self._get_similarities(), eh=face.eh, es=face.es, nl=face.nl, mh=face.mh)
+            chunk = self.memory.recall(distances=self._get_similarities(), eh=face.eh, es=face.es, nl=face.nl, mh=face.mh)
             if chunk:
                 self.motor.type(chunk.get('category'))
             else:
@@ -118,24 +112,30 @@ class FaceClassificationSimulation:
                   Condition('EF', TRAINING_STIMULI[2]), Condition('HF19', TRAINING_STIMULI[2], exe_num=19)]
     HUMAN_CORRECT = {
         '1A': [.968, .665, .937, .975, .875, .134, .261, .171, .089, .045, .529, .538, .258, .541, .430, .283, .778,
-               .145, .281, .780, .291, .277, .601, .289, .272, .490, .261, .386, .269, .114, .796, .538, .981, .126]}
+               .145, .281, .780, .291, .277, .601, .289, .272, .490, .261, .386, .269, .114, .796, .538, .981, .126],
+        '1B': [.956, .594, .931, .944, .775, .1, .1, .15, .069, .006, .4, .488, .275, .425, .238, .269, .675,
+               .094, .325, .681, .125, .269, .45, .219, .275, .413, .275, .144, .294, .094, .806, .300, .931, .05],
+        'EF': [.660, .253, .456, .375, .843, .156, .855, .113, .717, .681, .711, .763, .937, .338, .525, .394, .081,
+               .381, .774, .095, .944, .925, .094, .633, .394, .744, .675, .844, .838, .318, .27, .283, .369, .488],
+        'HF19': [.748, .151, .43, .415, .698, .101, .881, .126, .516, .541, .881, .656, .956, .516, .66, .679, .031,
+                 .189, .963, .069, .938, .969, .044, .811, .675, .855, .731, .844, .950, .222, .126, .169, .409, .264]}
 
     def run(self, n_trials=50, output=False, real_time=False, print_results=False, show_experiment=True):
 
         for condition in self.CONDITIONS:
-            corrects = Data(len(FaceClassificationTask.FACES))
+            selected_categories = Data(len(FaceClassificationTask.FACES))
 
             for _ in range(n_trials):
                 env = Environment(window=(500, 500) if show_experiment else None)
-                task = FaceClassificationTask(env, condition, corrects=corrects)
+                task = FaceClassificationTask(env, condition, corrects=selected_categories)
                 agent = FaceClassificationAgent(env)
-                World(task, agent).run(2400, output=output, real_time=real_time)  # TODO figure out time
+                World(task, agent).run(2400, output=output, real_time=real_time)
 
-            learning_error = corrects.analyze(self.HUMAN_CORRECT[condition.name])
+            prob_cat1 = Result(selected_categories.proportion(1), self.HUMAN_CORRECT[condition.name])
+            # TODO is proportion ^^ what you would do to find the prob of selecting category 1?? unsure what it expects...
 
             if print_results:
-                learning_error.output("Proportion of Learning Errors for " + condition.name, 2)
-            break
+                prob_cat1.output("Probability of Category 1 Selection " + condition.name, 2)
 
 
 if __name__ == '__main__':
