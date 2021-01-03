@@ -179,7 +179,7 @@ class Memory(Module):
                 if act > self.retrieval_threshold:
                     weighted_sum += act * chunk.get(slot)
                     total_act += act
-            new_slots[slot] = weighted_sum / total_act
+            new_slots[slot] = None if not total_act else weighted_sum / total_act
         return Chunk(**new_slots)
 
     def _get_query_matches(self, query):
