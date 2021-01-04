@@ -101,7 +101,7 @@ class ColorClassificationAgent(Agent):
         return (abs(val1 - val2) / 100) * w
 
     def calculate_distances_hue(self, hue1, hue2, w=1.0):
-        return (-abs(abs(180 - hue1) - abs(180 - hue2)) / 360) * w
+        return (-abs((180 - hue1) - (180 - hue2)) / 360) * w
 
     def guess_bias(self):
         p = random.random()
