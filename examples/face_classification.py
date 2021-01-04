@@ -18,7 +18,7 @@ class Condition:  # TODO where should this go
             train_stim.extend(base_stim.copy())
         if exe_num >= 0:
             train_stim.extend([exe_num for i in range(exe_freq - base_freq)])
-        return base_stim
+        return train_stim
 
 
 class FaceClassificationTask(Task):
