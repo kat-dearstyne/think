@@ -1,24 +1,9 @@
 import random
 
+from examples.classification_common import Condition
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
 
-random.seed(20)
-
-
-class Condition:  # TODO where should this go
-
-    def __init__(self, name, base_train_stim, exe_num=-1, exe_freq=19, base_freq=4, sim_weights=(0, 1.17, .83)):
-        self.name = name
-        self.sim_weights = sim_weights
-        self.train_stim = self._create_training_stimuli_nums(base_train_stim, exe_num, exe_freq, base_freq)
-
-    def _create_training_stimuli_nums(self, base_stim, exe_num, exe_freq, base_freq):
-        train_stim = []
-        for i in range(base_freq):
-            train_stim.extend(base_stim.copy())
-        if exe_num >= 0:
-            train_stim.extend([exe_num for i in range(exe_freq - base_freq)])
-        return train_stim
+random.seed(0)
 
 
 class ColorClassificationTask(Task):
@@ -77,7 +62,7 @@ class ColorClassificationAgent(Agent):
         self.memory.activation_noise = .5
         self.memory.retrieval_threshold = -1.8
         self.memory.latency_factor = .450
-        self.memory.match_scale = 10
+        self.memory.match_scale = 5
         self.condition = condition
         self._save_knowledge_to_memory()
 
@@ -126,10 +111,17 @@ class ColorClassificationAgent(Agent):
             self.memory.store(h=color.h, s=color.s, l=color.l, category=category)
 
 
+class ColorCondition(Condition):
+
+    def __init__(self, name, base_stim, exe_num=-1, exe_freq=19, base_freq=4, sim_weights=(0, 1.17, .83)):
+        super().__init__(name, base_stim, exe_num, exe_freq, base_freq, sim_weights)
+
+
 class ColorClassificationSimulation:
     TRAIN_STIM = [i for i in range(len(ColorClassificationTask.COLORS))]
-    CONDITIONS = [Condition('B1', TRAIN_STIM), Condition('E2', TRAIN_STIM, exe_num=1), Condition('E7', TRAIN_STIM, exe_num=6),
-                  Condition('E6(3)', TRAIN_STIM, exe_num=5, exe_freq=12), Condition('E6(5)', TRAIN_STIM, exe_num=5)]
+    CONDITIONS = [ColorCondition('B1', TRAIN_STIM), ColorCondition('E2', TRAIN_STIM, exe_num=1),
+                  ColorCondition('E7', TRAIN_STIM, exe_num=6), ColorCondition('E6(3)', TRAIN_STIM, exe_num=5, exe_freq=12),
+                  ColorCondition('E6(5)', TRAIN_STIM, exe_num=5)]
     HUMAN_CORRECT = {'B1': [.318, .123, .513, .113, .175, .337, .13, .162, .372, .097, .143, .272],
                      'E2': [.296, .026, .46, .067, .114, .328, .181, .116, .409, .05, .103, .223],
                      'E7': [.308, .147, .555, .103, .16, .384, .039, .131, .345, .066, .146, .267],
@@ -145,7 +137,7 @@ class ColorClassificationSimulation:
                 env = Environment(window=(500, 500) if show_experiment else None)
                 task = ColorClassificationTask(env, condition, corrects=corrects)
                 agent = ColorClassificationAgent(env, condition)
-                World(task, agent).run(1590, output=output, real_time=real_time)  # TODO figure out time
+                World(task, agent).run(1590, output=output, real_time=real_time)  # TODO figure out correct time
 
             learning_error = Result(corrects.proportion(0), self.HUMAN_CORRECT[condition.name])
 

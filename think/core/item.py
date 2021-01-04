@@ -1,5 +1,6 @@
 import colorsys
 import math
+from sys import float_info
 
 
 class Item:
@@ -235,7 +236,8 @@ class Color:
 
     def __eq__(self, other):
         if isinstance(other, Color):
-            return self.h == other.h and self.s == other.s and self.l == other.l
+            return abs(self.h - other.h) <= float_info.epsilon and abs(self.s - other.s) <= float_info.epsilon and \
+                   abs(self.l - other.l) <= float_info.epsilon
         return False
 
 

@@ -1,24 +1,9 @@
 import random
 
+from examples.classification_common import Condition
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Face, Result
 
-random.seed(20)
-
-
-class Condition:  # TODO where should this go
-
-    def __init__(self, name, base_stim, exe_num=-1, exe_freq=5, base_freq=1, sim_weights=None):
-        self.name = name
-        self.sim_weights = sim_weights
-        self.train_stim = self._create_training_stimuli_nums(base_stim, exe_num, exe_freq, base_freq)
-
-    def _create_training_stimuli_nums(self, base_stim, exe_num, exe_freq, base_freq):
-        train_stim = []
-        for i in range(base_freq):
-            train_stim.extend(base_stim.copy())
-        if exe_num >= 0:
-            train_stim.extend([exe_num for i in range(exe_freq - base_freq)])
-        return train_stim
+random.seed(0)
 
 
 class FaceClassificationTask(Task):
@@ -76,7 +61,7 @@ class FaceClassificationTask(Task):
 
 
 class FaceClassificationAgent(Agent):
-    MAX_MIN = [(23.5, 15), (21.5, 11.5), (18, 9), (16.5, 7.5)]  # TODO move somewhere? calculate instead of hard code?
+    MAX_MIN = [(23.5, 15), (21.5, 11.5), (18, 9), (16.5, 7.5)]
 
     def __init__(self, env, condition, output=False, demo_blending=False):
         super().__init__(output=output)
@@ -122,12 +107,18 @@ class FaceClassificationAgent(Agent):
                 print(blended_chunk)
 
 
+class FaceCondition(Condition):
+
+    def __init__(self, name, base_stim, exe_num=-1, exe_freq=5, base_freq=1, sim_weights=None):
+        super().__init__(name, base_stim, exe_num, exe_freq, base_freq, sim_weights)
+
+
 class FaceClassificationSimulation:
     TRAINING_STIMULI = {1: [i for i in range(10)], 2: [8, 12, 17, 19, 22, 23, 25, 27, 28, 32]}
-    CONDITIONS = [Condition('1EF', TRAINING_STIMULI[1], sim_weights=(.19, .12, .25, .45)),
-                  Condition('1HF7', TRAINING_STIMULI[1], exe_num=7, sim_weights=(.15, .15, .29, .41)),
-                  Condition('2EF', TRAINING_STIMULI[2], sim_weights=(.108, .463, 0, .429)),
-                  Condition('2HF19', TRAINING_STIMULI[2], exe_num=19, sim_weights=(.126, .587, 0, .288))]
+    CONDITIONS = [FaceCondition('1EF', TRAINING_STIMULI[1], sim_weights=(.19, .12, .25, .45)),
+                  FaceCondition('1HF7', TRAINING_STIMULI[1], exe_num=7, sim_weights=(.15, .15, .29, .41)),
+                  FaceCondition('2EF', TRAINING_STIMULI[2], sim_weights=(.108, .463, 0, .429)),
+                  FaceCondition('2HF19', TRAINING_STIMULI[2], exe_num=19, sim_weights=(.126, .587, 0, .288))]
     HUMAN_CORRECT = {
         '1EF': [.968, .665, .937, .975, .875, .134, .261, .171, .089, .045, .529, .538, .258, .541, .430, .283, .778,
                 .145, .281, .780, .291, .277, .601, .289, .272, .490, .261, .386, .269, .114, .796, .538, .981, .126],
@@ -147,10 +138,9 @@ class FaceClassificationSimulation:
                 env = Environment(window=(500, 500) if show_experiment else None)
                 task = FaceClassificationTask(env, condition, corrects=selected_categories)
                 agent = FaceClassificationAgent(env, condition, demo_blending=demo_blending)
-                World(task, agent).run(2400, output=output, real_time=real_time)
+                World(task, agent).run(2400, output=output, real_time=real_time)  # TODO figure out correct time
 
             prob_cat1 = Result(selected_categories.proportion(1), self.HUMAN_CORRECT[condition.name])
-            # TODO is proportion ^^ what you would do to find the prob of selecting category 1?? unsure what it expects...
 
             if print_results:
                 prob_cat1.output("Probability of Category 1 Selection " + condition.name, 2)
