@@ -1,7 +1,8 @@
 import math
 import random
+from copy import *
 
-from think import Buffer, Item, Module, Query
+from think import Buffer, Item, Module, Query, Fraction
 
 
 class Chunk(Item):
@@ -31,7 +32,7 @@ class Memory(Module):
     OPTIMIZED_DECAY = 2
     ADVANCED_DECAY = 3
 
-    def __init__(self, agent, decay=None, match_scale=0):
+    def __init__(self, agent, decay=None):
         super().__init__('memory', agent)
         self.decay = decay or Memory.NO_DECAY
         self.chunks = {}
@@ -40,7 +41,9 @@ class Memory(Module):
         self.retrieval_threshold = 0.0
         self.latency_factor = 1.0
         self.activation_noise = None
-        self.match_scale = match_scale
+        self.match_scale = 0
+        self.use_blending = False
+        self.num_chunks = 1
         self._unique = 1
 
     def _uniquify(self, id):
@@ -60,11 +63,14 @@ class Memory(Module):
     def get(self, id):
         return self.chunks[id]
 
-    def _add_use(self, chunk):
-        if self.decay == Memory.OPTIMIZED_DECAY:
-            chunk.increment_use()
-        elif self.decay == Memory.ADVANCED_DECAY:
-            chunk.add_use(self.time())
+    def _add_use(self, chunks):
+        if not isinstance(chunks, list):
+            chunks = [chunks]
+        for chunk in chunks:
+            if self.decay == Memory.OPTIMIZED_DECAY:
+                chunk.increment_use()
+            elif self.decay == Memory.ADVANCED_DECAY:
+                chunk.add_use(self.time())
 
     def _get_match(self, chunk):
         for existing in self.chunks.values():
@@ -108,7 +114,7 @@ class Memory(Module):
             elif self.decay == Memory.ADVANCED_DECAY:
                 uses = 0
                 for use in chunk.uses:
-                    uses += math.pow(time - use, -self.decay_rate)
+                    uses += math.pow(time - use, -self.decay_rate) if time - use != 0 else 0
                 base_level = math.log(uses)
             chunk.activation = base_level
             return chunk.activation
@@ -116,7 +122,8 @@ class Memory(Module):
     def _compute_transient_act(self, chunk, sim_val=None):
         act = self._compute_activation(chunk)
         if sim_val is not None:
-            act += self.match_scale * sim_val
+            match_scale = math.exp(act)*self.match_scale
+            act += match_scale * sim_val
         if self.activation_noise is not None:
             act += random.gauss(0, self.activation_noise)
         chunk.transient_activation = act
@@ -133,23 +140,34 @@ class Memory(Module):
     def compute_recall_time(self, chunk):
         return self.latency_factor * math.exp(min(-chunk.activation, self.retrieval_threshold))
 
-    def get_best_slot_val(self, slot, query=None, distances=None, **kwargs):
-        if not isinstance(query, Query):
-            query = Query(distances=distances, **kwargs)
+    def _get_best_chunks(self, query=None):
         matches, sim_vals = self._get_query_matches(query)
-        vals = {}
+        best_chunks = []
+        best_act = []
         for i in range(len(matches)):
             chunk = matches[i]
             sim_val = None if len(sim_vals) <= i else sim_vals[i]
             act = self._compute_transient_act(chunk, sim_val)
             if act > self.retrieval_threshold:
-                val = chunk.get(slot)
-                if val not in vals:
-                    vals[val] = 0
-                vals[val] += act
-        return None if not vals else max(vals, key=vals.get)
+                if len(best_chunks) < self.num_chunks:
+                    best_chunks.append(chunk)
+                    best_act.append(act)
+                elif best_act[-1] < act:
+                    best_chunks[-1] = chunk
+                    best_act[-1] = act
+                best_act, best_chunks = (list(t) for t in zip(*sorted(zip(best_act, best_chunks))))
+        return best_chunks if best_chunks else None
 
     def _get_chunk(self, query):
+        if self.use_blending:
+            chunk = self._get_blended_chunk(query)
+        elif self.num_chunks > 1:
+            chunk = self._get_best_chunks(query)
+        else:
+            chunk = self._get_best_chunk(query)
+        return chunk
+
+    def _get_best_chunk(self, query):
         matches, sim_vals = self._get_query_matches(query)
         best_chunk = None
         best_act = self.retrieval_threshold
@@ -162,25 +180,42 @@ class Memory(Module):
                 best_act = act
         return best_chunk
 
-    def get_blended_chunk(self, slots, query=None, distances=None, **kwargs):
-        if not isinstance(query, Query):
-            query = Query(distances=distances, **kwargs)
+    def _get_blended_chunk(self, query, chunks=None):
         matches, sim_vals = self._get_query_matches(query)
-        new_slots = kwargs
-        if not isinstance(slots, list):
-            slots = [slots]
-        for slot in slots:
-            weighted_sum = 0
-            total_act = 0
-            for i in range(len(matches)):
-                chunk = matches[i]
-                sim_val = None if len(sim_vals) <= i else sim_vals[i]
-                act = self._compute_transient_act(chunk, sim_val)
-                if act > self.retrieval_threshold:
-                    weighted_sum += act * chunk.get(slot)
-                    total_act += act
-            new_slots[slot] = None if not total_act else weighted_sum / total_act
-        return Chunk(**new_slots)
+        blended_slots = deepcopy(query.slotvals)
+        is_cont = {slot: self._is_continuous(val) for slot, val in blended_slots.items()}
+        blended_chunk = None
+        best_chunk = matches[0]
+        success = False
+        for i in range(len(matches)):
+            chunk = matches[i]
+            sim_val = None if len(sim_vals) <= i else sim_vals[i]
+            act = self._compute_transient_act(chunk, sim_val)
+            if act > self.retrieval_threshold:
+                success = True
+                best_chunk = chunk if best_chunk.transient_activation < act else best_chunk
+                for slot in chunk.get_slots():
+                    if slot not in query.slotvals:
+                        if slot not in blended_slots:
+                            blended_slots[slot] = Fraction()
+                            is_cont[slot] = False
+                        if self._is_continuous(chunk.get(slot)):
+                            is_cont[slot] = True
+                        act += self.retrieval_threshold
+                        blended_slots[slot].numerator += act * chunk.get(slot)
+                        blended_slots[slot].denominator += act
+        if success:
+            for slot, val in blended_slots.items():
+                if isinstance(val, Fraction):
+                    blended_slots[slot] = val.to_float() if is_cont[slot] else val.to_int()
+            blended_chunk = Chunk(**blended_slots)
+            blended_chunk.transient_activation = best_chunk.transient_activation
+            blended_chunk.use_count = best_chunk.use_count
+            blended_chunk.uses = best_chunk.uses
+        return blended_chunk
+
+    def _is_continuous(self, val):
+        return isinstance(val, float)
 
     def _get_query_matches(self, query):
         matches = []
@@ -210,12 +245,16 @@ class Memory(Module):
         act = self._compute_transient_act(chunk)
         self._start_recall(chunk if act >= self.retrieval_threshold else None)
 
-    def _start_recall(self, chunk):
-        if chunk is not None:
-            duration = self.latency_factor * \
-                       math.exp(-chunk.transient_activation)
-            self.buffer.set(chunk, duration, 'recalled {}'.format(
-                chunk), lambda: self._add_use(chunk))
+    def _start_recall(self, chunks):
+        chunks = [chunks] if not isinstance(chunks, list) and chunks else chunks
+        if chunks is not None:
+            duration = 0
+            for chunk in chunks:
+                duration += self.latency_factor * \
+                           math.exp(-chunk.transient_activation)
+            duration = duration/len(chunks)
+            self.buffer.set(chunks, duration, 'recalled {}'.format(
+                chunks), lambda: self._add_use(chunks))
         else:
             duration = self.latency_factor * \
                        math.exp(-self.retrieval_threshold)

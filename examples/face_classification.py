@@ -3,7 +3,7 @@ import random
 from examples.classification_common import Condition
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Face, Result
 
-random.seed(0)
+random.seed(1)
 
 
 class FaceClassificationTask(Task):
@@ -63,7 +63,7 @@ class FaceClassificationTask(Task):
 class FaceClassificationAgent(Agent):
     MAX_MIN = [(23.5, 15), (21.5, 11.5), (18, 9), (16.5, 7.5)]
 
-    def __init__(self, env, condition, output=False, demo_blending=False):
+    def __init__(self, env, condition, output=False):
         super().__init__(output=output)
         self.memory = Memory(self, Memory.OPTIMIZED_DECAY)
         self.vision = Vision(self, env.display)
@@ -73,8 +73,8 @@ class FaceClassificationAgent(Agent):
         self.memory.retrieval_threshold = -1.8
         self.memory.latency_factor = .450
         self.memory.match_scale = 10
+        self.memory.num_chunks = 3
         self.condition = condition
-        self.demo_blending = demo_blending
 
     def _get_distances(self):
         return {Face.features[i]: lambda a, b: self.calculate_differences(a, b, self.MAX_MIN[i], self.condition.sim_weights[i])
@@ -90,9 +90,11 @@ class FaceClassificationAgent(Agent):
         while self.time() < time:
             visual = self.vision.wait_for(isa='face')
             face = self.vision.encode(visual)
-            chunk = self.memory.recall(distances=self._get_distances(), eh=face.eh, es=face.es, nl=face.nl, mh=face.mh)
-            if chunk:
-                selected_category = chunk.get('category')
+            chunks = self.memory.recall(distances=self._get_distances(), eh=face.eh, es=face.es, nl=face.nl, mh=face.mh)
+            chunks = [chunks] if not isinstance(chunks, list) and chunks else chunks
+            if chunks:
+                categories = [chunk.get('category') for chunk in chunks]
+                selected_category = max(set(categories), key=categories.count)
             else:
                 selected_category = self.guess()
             self.motor.type(selected_category)
@@ -101,10 +103,6 @@ class FaceClassificationAgent(Agent):
             if not category:
                 category = selected_category
             self.memory.store(eh=face.eh, es=face.es, nl=face.nl, mh=face.mh, category=category)
-            if self.demo_blending:
-                blended_chunk = self.memory.get_blended_chunk(slots='eh', distances=self._get_distances(),
-                                                              es=face.es, nl=face.nl, mh=face.mh, category=category)
-                print(blended_chunk)
 
 
 class FaceCondition(Condition):
@@ -129,7 +127,7 @@ class FaceClassificationSimulation:
         '2HF19': [.748, .151, .43, .415, .698, .101, .881, .126, .516, .541, .881, .656, .956, .516, .66, .679, .031,
                   .189, .963, .069, .938, .969, .044, .811, .675, .855, .731, .844, .950, .222, .126, .169, .409, .264]}
 
-    def run(self, n_trials=80, output=False, real_time=False, print_results=False, show_experiment=True, demo_blending=False):
+    def run(self, n_trials=80, output=False, real_time=False, print_results=False, show_experiment=True):
 
         for condition in self.CONDITIONS:
             selected_categories = Data(len(FaceClassificationTask.FACES))
@@ -137,15 +135,15 @@ class FaceClassificationSimulation:
             for _ in range(n_trials):
                 env = Environment(window=(500, 500) if show_experiment else None)
                 task = FaceClassificationTask(env, condition, corrects=selected_categories)
-                agent = FaceClassificationAgent(env, condition, demo_blending=demo_blending)
+                agent = FaceClassificationAgent(env, condition)
                 World(task, agent).run(2400, output=output, real_time=real_time)  # TODO figure out correct time
 
             prob_cat1 = Result(selected_categories.proportion(1), self.HUMAN_CORRECT[condition.name])
 
             if print_results:
                 prob_cat1.output("Probability of Category 1 Selection " + condition.name, 2)
+            break
 
 
 if __name__ == '__main__':
-    FaceClassificationSimulation().run(output=False, real_time=False, print_results=True, show_experiment=False,
-                                       demo_blending=False)
+    FaceClassificationSimulation().run(output=False, real_time=False, print_results=True, show_experiment=False)

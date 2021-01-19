@@ -63,6 +63,8 @@ class ColorClassificationAgent(Agent):
         self.memory.retrieval_threshold = -1.8
         self.memory.latency_factor = .450
         self.memory.match_scale = 5
+        self.memory.num_chunks = 3
+        self.memory.use_blending = False
         self.condition = condition
         self._save_knowledge_to_memory()
 
@@ -99,16 +101,18 @@ class ColorClassificationAgent(Agent):
         while self.time() < time:
             visual = self.vision.wait_for(isa='color')
             color = self.vision.encode(visual)
-            chunk = self.memory.recall(distances=self._get_distances(), h=color.h,
-                                       s=color.s, l=color.l)
-            if chunk:
-                selected_category = chunk.get('category')
+            chunks = self.memory.recall(distances=self._get_distances(), h=color.h,
+                                        s=color.s, l=color.l)
+            chunks = [chunks] if not isinstance(chunks, list) and chunks else chunks
+            if chunks:
+                categories = [chunk.get('category') for chunk in chunks]
+                selected_category = max(set(categories), key=categories.count)
             else:
                 selected_category = self.guess_bias()
             self.motor.type(selected_category)
             visual = self.vision.wait_for(isa='text')
             category = self.vision.encode(visual)
-            self.memory.store(h=color.h, s=color.s, l=color.l, category=category)
+            self.memory.store(h=color.h, s=color.s, l=color.l, category=int(category))
 
 
 class ColorCondition(Condition):
@@ -143,6 +147,7 @@ class ColorClassificationSimulation:
 
             if print_results:
                 learning_error.output("Proportion of Learning Errors for " + condition.name, 2)
+            break
 
 
 if __name__ == '__main__':

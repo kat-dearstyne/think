@@ -84,6 +84,7 @@ class SlotQuery:
 class Query:
 
     def __init__(self, distances=None, **slotvals):
+        self.slotvals = slotvals
         self.slotqs = []
         self.partial_matching = distances is not None
         for slot, val in slotvals.items():
@@ -223,9 +224,9 @@ class Area(Location):
 class Color:
 
     def __init__(self, h=0.0, s=0.0, l=0.0):
-        self.h = h  # hue
-        self.s = s  # saturation
-        self.l = l  # lightness
+        self.h = float(h)  # hue
+        self.s = float(s)  # saturation
+        self.l = float(l)  # lightness
         self.rgb = self.__convert_to_rgb(h, s, l)
 
     def __convert_to_rgb(self, h, s, l):
@@ -253,3 +254,17 @@ class Face:
         self.es = es
         self.nl = nl
         self.mh = mh * 1.5
+
+
+class Fraction:
+
+    def __init__(self, numerator=0.0, denominator=0.0):
+        self.numerator = numerator
+        self.denominator = denominator
+
+    def to_float(self):
+        return self.numerator / self.denominator if self.denominator != 0 else None
+
+    def to_int(self):
+        float_ = self.to_float()
+        return round(float_) if float_ is not None else None
