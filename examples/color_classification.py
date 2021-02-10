@@ -1,18 +1,49 @@
+import math
 import random
 
+from think import (Agent, Chunk, Color, Data, Environment, Memory, Motor,
+                   Result, Task, Vision, World)
+
 from examples.classification_common import Condition
-from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
 
 random.seed(0)
 
 
 class ColorClassificationTask(Task):
     N_BLOCKS = 3
-    COLORS = [Color(s=15, l=64), Color(s=56, l=74), Color(s=32, l=59),
-              Color(s=65, l=65), Color(s=18, l=51), Color(s=46, l=51),
-              Color(s=78, l=48), Color(s=32, l=42), Color(s=64, l=42),
-              Color(s=12, l=29), Color(s=52, l=26), Color(s=65, l=26)]
-    CAT = [1, 2, 2, 2, 1, 2, 2, 1, 2, 1, 1, 1]
+
+    COLORS = [
+
+        # Extracted from the graph in the paper
+        Color(s=14, l=78), Color(s=56, l=98), Color(s=32, l=68),
+        Color(s=64, l=81), Color(s=18, l=52), Color(s=48, l=52),
+        Color(s=79, l=49), Color(s=31, l=34), Color(s=64, l=34),
+        Color(s=12, l=9), Color(s=52, l=2), Color(s=65, l=2),
+
+        # Similar to above, but L/2 - maybe better not to use
+        # Color(s=15, l=64), Color(s=56, l=74), Color(s=32, l=59),
+        # Color(s=65, l=65), Color(s=18, l=51), Color(s=46, l=51),
+        # Color(s=78, l=48), Color(s=32, l=42), Color(s=64, l=42),
+        # Color(s=12, l=29), Color(s=52, l=26), Color(s=65, l=26),
+
+        # Tried the Munsell colors, both HSV and HSL - but they're not
+        # even close! So we use the colors extracted from the graph.
+        # Color(h=353, s=36, l=74),  # Munsell 5R 7/4
+        # Color(h=357, s=81, l=77),  # Munsell 5R 7/8
+        # Color(h=357, s=40, l=65),  # Munsell 5R 6/6
+        # Color(h=358, s=68, l=67),  # Munsell 5R 6/10
+        # Color(h=355, s=20, l=53),  # Munsell 5R 5/4
+        # Color(h=358, s=40, l=55),  # Munsell 5R 5/8
+        # Color(h=356, s=61, l=56),  # Munsell 5R 5/12
+        # Color(h=357, s=31, l=44),  # Munsell 5R 4/6
+        # Color(h=355, s=48, l=45),  # Munsell 5R 4/10
+        # Color(h=19,  s=39, l=29),  # Munsell 5R 3/4
+        # Color(h=27,  s=98, l=23),  # Munsell 5R 3/8
+        # Color(h=348, s=72, l=32),  # Munsell 5R 3/10
+
+    ]
+
+    CATEGORIES = [1, 2, 2, 2, 1, 2, 2, 1, 2, 1, 1, 1]
 
     def __init__(self, env, condition, corrects=None):
         super().__init__()
@@ -40,8 +71,8 @@ class ColorClassificationTask(Task):
             for num in color_nums:
                 self.color_num = num
                 self.trial_start = self.time()
-                self.trial_category = self.CAT[num]
-                self.display.clear()
+                self.trial_category = self.CATEGORIES[num]
+                # self.display.clear()
                 color_visual = self.display.add_color(
                     50, 50, 15, self.COLORS[num], isa='color')
                 self.display.set_attend(color_visual)
@@ -50,53 +81,41 @@ class ColorClassificationTask(Task):
                 category_visual = self.display.add_text(
                     50, 50, self.trial_category)
                 self.display.set_attend(category_visual)
+                self.wait(5)
+                self.display.clear()
 
 
 class ColorClassificationAgent(Agent):
-    KNOWLEDGE = {1: [Color(11, 45, 35)], 2: [Color(350, 100, 88)]}
-    KNOWLEDGE_STRENGTH = 1
 
     def __init__(self, env, condition, output=False):
         super().__init__(output=output)
-        self.memory = Memory(self, Memory.OPTIMIZED_DECAY)
+        self.memory = Memory(self, Memory.ADVANCED_DECAY)
         self.vision = Vision(self, env.display)
         self.motor = Motor(self, self.vision, env)
-        self.memory.decay_rate = .5
-        self.memory.activation_noise = .5
-        self.memory.retrieval_threshold = -1.8
-        self.memory.latency_factor = .450
-        self.memory.match_scale = 5
-        self.memory.num_chunks = 3
-        self.memory.use_blending = False
         self.condition = condition
-        self._save_knowledge_to_memory()
 
-    def _save_knowledge_to_memory(self):
-        for category, colors in self.KNOWLEDGE.items():
-            if not isinstance(colors, list):
-                colors = [colors]
-            for color in colors:
-                chunk = Chunk(h=color.h, s=color.s,
-                              l=color.l, category=category)
-                chunk.use_count = self.KNOWLEDGE_STRENGTH
-                self.memory.store(chunk)
+        self.memory.latency_factor = 1.0
+        self.memory.decay_rate = .25  # .5
+        self.memory.activation_noise = .5  # .25
 
-    def _get_distances(self):
-        return {
-            'h': lambda a, b: self.calculate_distances_hue(a, b, self.condition.sim_weights[0]),
-            's': lambda a, b: self.calculate_distances_other(a, b, self.condition.sim_weights[1]),
-            'l': lambda a, b: self.calculate_distances_other(a, b, self.condition.sim_weights[2])
-        }
+        self.memory.retrieval_threshold = -.5  # -1.1
 
-    def calculate_distances_other(self, val1, val2, w=1.0):
-        return (abs(val1 - val2) / 100) * w
+        # self.memory.match_scale = 100.0  # effectively perfect matching
+        self.memory.match_scale = 1.0
 
-    def calculate_distances_hue(self, hue1, hue2, w=1.0):
-        return (-abs((180 - hue1) - (180 - hue2)) / 360) * w
+        self.memory.use_blending = False
 
-    def guess_bias(self):
-        p = random.random()
-        return 1 if p <= .67 else 2
+        def distance_deg(hue1, hue2):
+            d = hue1 - hue2
+            return min(abs(d), abs(d+360), abs(d-360)) / 360
+
+        def distance_pct(val1, val2):
+            dist = abs(val1 - val2) / 100
+            return dist
+
+        self.memory.add_distance_fn('h', distance_deg)
+        self.memory.add_distance_fn('s', distance_pct)
+        self.memory.add_distance_fn('l', distance_pct)
 
     def guess(self):
         return random.randint(1, 2)
@@ -105,17 +124,8 @@ class ColorClassificationAgent(Agent):
         while self.time() < time:
             visual = self.vision.wait_for(isa='color')
             color = self.vision.encode(visual)
-            chunks = self.memory.recall(distances=self._get_distances(), h=color.h,
-                                        s=color.s, l=color.l)
-            chunks = ([chunks]
-                      if not isinstance(chunks, list) and chunks
-                      else chunks)
-            if chunks:
-                categories = [chunk.get('category') for chunk in chunks]
-                selected_category = max(set(categories), key=categories.count)
-            else:
-                selected_category = self.guess_bias()
-            self.motor.type(selected_category)
+            chunk = self.memory.recall(h=color.h, s=color.s, l=color.l)
+            self.motor.type(chunk.category if chunk else self.guess())
             visual = self.vision.wait_for(isa='text')
             category = self.vision.encode(visual)
             self.memory.store(h=color.h, s=color.s,
@@ -124,7 +134,10 @@ class ColorClassificationAgent(Agent):
 
 class ColorCondition(Condition):
 
-    def __init__(self, name, base_stim, exe_num=-1, exe_freq=19, base_freq=4, sim_weights=(0, 1.17, .83)):
+    def __init__(self, name, base_stim, exe_num=-1, exe_freq=19, base_freq=4,
+                 # sim_weights=(0, 1.17, .83)
+                 sim_weights=(1, 1, 1)
+                 ):
         super().__init__(name, base_stim, exe_num, exe_freq, base_freq, sim_weights)
 
 
@@ -141,19 +154,18 @@ class ColorClassificationSimulation:
                      'E6(3)': [.332, .155, .420, .118, .195, .208, .167, .168, .328, .115, .169, .254],
                      'E6(5)': [.288, .141, .415, .119, .19, .123, .157, .167, .336, .087, .108, .182]}
 
-    def run(self, n_trials=50, output=False, real_time=False, print_results=False, show_experiment=True):
+    def run(self, n_runs=50, output=False, real_time=False, print_results=False, show_experiment=True):
 
         for condition in self.CONDITIONS:
             print(f'\nRunning condition {condition.name}...')
             corrects = Data(len(ColorClassificationTask.COLORS))
 
-            for _ in range(n_trials):
+            for _ in range(n_runs):
                 env = Environment(window=(500, 500)
                                   if show_experiment else None)
                 task = ColorClassificationTask(
                     env, condition, corrects=corrects)
                 agent = ColorClassificationAgent(env, condition)
-                # TODO figure out correct time
                 World(task, agent).run(720, output=output, real_time=real_time)
 
             learning_error = Result(corrects.proportion(0),
@@ -166,5 +178,11 @@ class ColorClassificationSimulation:
 
 
 if __name__ == '__main__':
-    ColorClassificationSimulation().run(output=False, real_time=False,
+    # ColorClassificationSimulation().run(output=True,
+    #                                     real_time=True,
+    #                                     n_runs=20,
+    #                                     print_results=True, show_experiment=False)
+    ColorClassificationSimulation().run(output=False,
+                                        real_time=False,
+                                        n_runs=30,
                                         print_results=True, show_experiment=False)
