@@ -116,7 +116,7 @@ class ColorClassificationAgent(Agent):
 
 class ColorCondition(Condition):
 
-    def __init__(self, name, base_stim, exe_num=-1, exe_freq=19, base_freq=4, sim_weights=(0, 1.17, .83)):
+    def __init__(self, name, base_stim, exe_num=-1, exe_freq=19, base_freq=4, sim_weights=(0, .89, 1.11)):
         super().__init__(name, base_stim, exe_num, exe_freq, base_freq, sim_weights)
 
 
