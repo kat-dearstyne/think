@@ -8,6 +8,17 @@ class Item:
     def __init__(self, **slotvals):
         self.slots = slotvals
 
+    def clone(self):
+        item = Item()
+        for slot, val in self.slots.items():
+            item.set(slot, val)
+        return item
+
+    def merge(self, item):
+        for slot, val in item.slots.items():
+            self.set(slot, val)
+        return self
+
     def get_slots(self):
         return self.slots.keys()
 
@@ -37,8 +48,14 @@ class Item:
         self.slots.pop(slot, None)
         return self
 
-    def equals(self, item):
+    def __eq__(self, item):
         return len(self.slots) == len(item.slots) and self.matches(item)
+
+    def equals(self, item):
+        return self == item
+
+    def to_dict(self):
+        return self.slots
 
     def matches(self, item):
         for slot, val in item.slots.items():
@@ -52,11 +69,10 @@ class Item:
 
 class SlotQuery:
 
-    def __init__(self, slot, op, val, dist=None):
+    def __init__(self, slot, op, val):
         self.slot = slot
         self.op = op
         self.val = val
-        self.dist = dist
 
     def matches(self, item):
         val = item.get(self.slot)
@@ -72,8 +88,6 @@ class SlotQuery:
             return val < self.val
         elif self.op == '<=':
             return val <= self.val
-        elif self.op == '~=':
-            return self.dist(self.val, val)
         else:
             return False
 
@@ -83,16 +97,10 @@ class SlotQuery:
 
 class Query:
 
-    def __init__(self, distances=None, **slotvals):
-        self.slotvals = slotvals
+    def __init__(self, **slotvals):
         self.slotqs = []
-        self.partial_matching = distances is not None
         for slot, val in slotvals.items():
-            if distances and slot in distances:
-                self.dist(slot, val, distances[slot])
-            else:
-                self.eq(slot, val)
-            self.slot = val
+            self.eq(slot, val)
 
     def eq(self, slot, val):
         self.slotqs.append(SlotQuery(slot, '=', val))
@@ -118,10 +126,6 @@ class Query:
         self.slotqs.append(SlotQuery(slot, '<=', val))
         return self
 
-    def dist(self, slot, val, dist):  # used for partial match
-        self.slotqs.append(SlotQuery(slot, '~=', val, dist=dist))
-        return self
-
     def get(self, slot, op=None, val=None):
         for slotq in self.slotqs:
             if (slot == slotq.slot and (op is None or op == slotq.op)
@@ -138,14 +142,18 @@ class Query:
                 return False
         return True
 
-    def partial_matches(self, item):
-        total = 0
+    def similarity(self, item, distance_fns):
+        dist = 0
         for slotq in self.slotqs:
-            matches = slotq.matches(item)
-            if not isinstance(matches, float):
-                matches = -1 + float(matches)
-            total += matches ** 2
-        return self._sim_exp(total)
+            slot_dist = 0
+            if slotq.slot in distance_fns:
+                slot_dist = distance_fns[slotq.slot](
+                    slotq.val, item.get(slotq.slot))
+            else:
+                if not slotq.matches(item):
+                    slot_dist = 1
+            dist += slot_dist**2
+        return self._sim_exp(dist)
 
     def _sim_exp(self, total_dist, c=1):
         return math.e ** (-c * math.sqrt(total_dist)) - 1
