@@ -1,10 +1,23 @@
+import colorsys
 import math
+from sys import float_info
 
 
 class Item:
 
     def __init__(self, **slotvals):
         self.slots = slotvals
+
+    def clone(self):
+        item = Item()
+        for slot, val in self.slots.items():
+            item.set(slot, val)
+        return item
+
+    def merge(self, item):
+        for slot, val in item.slots.items():
+            self.set(slot, val)
+        return self
 
     def get_slots(self):
         return self.slots.keys()
@@ -35,8 +48,14 @@ class Item:
         self.slots.pop(slot, None)
         return self
 
-    def equals(self, item):
+    def __eq__(self, item):
         return len(self.slots) == len(item.slots) and self.matches(item)
+
+    def equals(self, item):
+        return self == item
+
+    def to_dict(self):
+        return self.slots
 
     def matches(self, item):
         for slot, val in item.slots.items():
@@ -123,6 +142,22 @@ class Query:
                 return False
         return True
 
+    def similarity(self, item, distance_fns):
+        dist = 0
+        for slotq in self.slotqs:
+            slot_dist = 0
+            if slotq.slot in distance_fns:
+                slot_dist = distance_fns[slotq.slot](
+                    slotq.val, item.get(slotq.slot))
+            else:
+                if not slotq.matches(item):
+                    slot_dist = 1
+            dist += slot_dist**2
+        return self._sim_exp(dist)
+
+    def _sim_exp(self, total_dist, c=1):
+        return math.e ** (-c * math.sqrt(total_dist)) - 1
+
     def __str__(self):
         return '[' + ', '.join(map(str, self.slotqs)) + ']'
 
@@ -192,3 +227,52 @@ class Area(Location):
         else:
             aw = self.h / math.cos(math.pi / 2 - theta)
         return aw
+
+
+class Color:
+
+    def __init__(self, h=0.0, s=0.0, l=0.0):
+        self.h = float(h)  # hue
+        self.s = float(s)  # saturation
+        self.l = float(l)  # lightness
+        self.rgb = self.__convert_to_rgb(h, s, l)
+
+    def __convert_to_rgb(self, h, s, l):
+        return tuple(round(i * 255) for i in colorsys.hls_to_rgb(h, s / 100, l / 100))
+
+    def __repr__(self):
+        return str((self.h, self.s, self.l))
+
+    def __eq__(self, other):
+        if isinstance(other, Color):
+            return abs(self.h - other.h) <= float_info.epsilon and abs(self.s - other.s) <= float_info.epsilon and \
+                   abs(self.l - other.l) <= float_info.epsilon
+        return False
+
+
+class Face:
+    w = 75
+    h = 110
+    w_scale = 1.8
+    h_scale = 1.5
+    features = ['eh', 'es', 'nl', 'mh']
+
+    def __init__(self, eh=23.5, es=21.5, nl=9, mh=16.5):
+        self.eh = eh
+        self.es = es
+        self.nl = nl
+        self.mh = mh * 1.5
+
+
+class Fraction:
+
+    def __init__(self, numerator=0.0, denominator=0.0):
+        self.numerator = numerator
+        self.denominator = denominator
+
+    def to_float(self):
+        return self.numerator / self.denominator if self.denominator != 0 else None
+
+    def to_int(self):
+        float_ = self.to_float()
+        return round(float_) if float_ is not None else None

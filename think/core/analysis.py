@@ -119,13 +119,16 @@ class Values:
             res = 0
             for i in range(self.size()):
                 res += (self.get(i) - m1) * (values.get(i) - m2)
-            return res / ((self.size() - 1) * sd1 * sd2)
+            return 0 if sd1 == 0 or sd2 == 0 else res / ((self.size() - 1) * sd1 * sd2)
         else:
             return None
 
     def tab_string(self, places=3):
         vals = map(lambda d: ('{:.' + str(places) + 'f}').format(d), self.v)
         return '\t'.join(vals)
+
+    def count(self, value):
+        return self.v.count(value)
 
     def __str__(self, places=3):
         vals = map(lambda d: ('{:.' + str(places) + 'f}').format(d), self.v)
@@ -146,6 +149,13 @@ class Data:
             m = values.mean()
             res.add(m if m else 0)
         return res
+
+    def proportion(self, val):
+        prop = Values()
+        for values in self.values_list:
+            total = values.size()
+            prop.add(values.count(val) / total)
+        return prop
 
     def analyze(self, human):
         return Result(self.means(), human)
