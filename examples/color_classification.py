@@ -1,6 +1,6 @@
 import random
 
-from examples.classification_common import Condition
+from examples.classification_common import Condition, Util
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, Chunk, World, Result, Color
 
 random.seed(0)
@@ -103,10 +103,8 @@ class ColorClassificationAgent(Agent):
             color = self.vision.encode(visual)
             chunks = self.memory.recall(h=color.h, s=color.s, l=color.l)
             chunks = [chunks] if not isinstance(chunks, list) and chunks else chunks
-            if chunks:
-                categories = [chunk.get('category') for chunk in chunks]
-                selected_category = max(set(categories), key=categories.count)
-            else:
+            selected_category = Util.get_top_category(chunks)
+            if selected_category is None:
                 selected_category = self.guess_bias()
             self.motor.type(selected_category)
             visual = self.vision.wait_for(isa='text')

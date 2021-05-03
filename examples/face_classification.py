@@ -1,8 +1,7 @@
 import random
 
-from examples.classification_common import Condition
+from examples.classification_common import Condition, Util
 from think import Agent, Data, Environment, Memory, Motor, Task, Vision, World, Face, Result
-from copy import deepcopy
 random.seed(1)
 
 
@@ -99,10 +98,8 @@ class FaceClassificationAgent(Agent):
             face = self.vision.encode(visual)
             chunks = self.memory.recall(eh=face.eh, es=face.es, nl=face.nl, mh=face.mh)
             chunks = [chunks] if not isinstance(chunks, list) and chunks else chunks
-            if chunks:
-                categories = [chunk.get('category') for chunk in chunks]
-                selected_category = max(set(categories), key=categories.count)
-            else:
+            selected_category = Util.get_top_category(chunks)
+            if selected_category is None:
                 selected_category = self.guess()
             self.motor.type(selected_category)
             visual = self.vision.wait_for(isa='text')

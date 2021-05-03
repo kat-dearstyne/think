@@ -12,3 +12,15 @@ class Condition:
         if exe_num >= 0:
             train_stim.extend([exe_num for i in range(exe_freq - base_freq)])
         return train_stim
+
+
+class Util:
+
+    @staticmethod
+    def get_top_category(chunks):
+        chunks = [chunks] if not isinstance(chunks, list) and chunks else chunks
+        if chunks:
+            categories = [chunk.get('category') for chunk in chunks]
+            selected_category = max(set(categories), key=categories.count)
+            return selected_category
+        return None
