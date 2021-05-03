@@ -134,6 +134,9 @@ class Values:
         vals = map(lambda d: ('{:.' + str(places) + 'f}').format(d), self.v)
         return '[' + ', '.join(vals) + ']'
 
+    def __repr__(self):
+        return self.__str__()
+
 
 class Data:
 
@@ -154,7 +157,7 @@ class Data:
         prop = Values()
         for values in self.values_list:
             total = values.size()
-            prop.add(values.count(val) / total)
+            prop.add(0 if total == 0 else values.count(val) / total)
         return prop
 
     def analyze(self, human):

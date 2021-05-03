@@ -255,6 +255,10 @@ class Face:
     h = 110
     w_scale = 1.8
     h_scale = 1.5
+    EH = 0
+    ES = 1
+    NL = 2
+    MH = 3
     features = ['eh', 'es', 'nl', 'mh']
 
     def __init__(self, eh=23.5, es=21.5, nl=9, mh=16.5):
